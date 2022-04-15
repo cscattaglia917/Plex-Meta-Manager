@@ -8,3 +8,4 @@ schedule==1.1.0
 retrying==1.3.3
 pathvalidate==2.4.1
 pillow==8.3.1
+EmbyAPI==4.1.1.0a0
