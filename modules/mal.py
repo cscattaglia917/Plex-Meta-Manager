@@ -1,9 +1,9 @@
-import logging, math, re, secrets, time, webbrowser
+import math, re, secrets, time, webbrowser
 from modules import util
 from modules.util import Failed, TimeoutExpired
 from ruamel import yaml
 
-logger = logging.getLogger("Plex Meta Manager")
+logger = util.logger
 
 builders = [
     "mal_id", "mal_all", "mal_airing", "mal_upcoming", "mal_tv", "mal_ova", "mal_movie", "mal_special",
@@ -52,6 +52,7 @@ class MyAnimeList:
         self.client_secret = params["client_secret"]
         self.config_path = params["config_path"]
         self.authorization = params["authorization"]
+        logger.secret(self.client_secret)
         if not self._save(self.authorization):
             if not self._refresh():
                 self._authorization()
@@ -108,9 +109,9 @@ class MyAnimeList:
 
     def _save(self, authorization):
         if authorization is not None and "access_token" in authorization and authorization["access_token"] and self._check(authorization):
-            if self.authorization != authorization:
+            if self.authorization != authorization and not self.config.read_only:
                 yaml.YAML().allow_duplicate_keys = True
-                config, ind, bsi = yaml.util.load_yaml_guess_indent(open(self.config_path))
+                config, ind, bsi = yaml.util.load_yaml_guess_indent(open(self.config_path, encoding="utf-8"))
                 config["mal"]["authorization"] = {
                     "access_token": authorization["access_token"],
                     "token_type": authorization["token_type"],
@@ -127,8 +128,13 @@ class MyAnimeList:
         return self.config.post_json(urls["oauth_token"], data=data)
 
     def _request(self, url, authorization=None):
-        new_authorization = authorization if authorization else self.authorization
-        response = self.config.get_json(url, headers={"Authorization": f"Bearer {new_authorization['access_token']}"})
+        token = authorization["access_token"] if authorization else self.authorization["access_token"]
+        logger.secret(token)
+        if self.config.trace_mode:
+            logger.debug(f"URL: {url}")
+        response = self.config.get_json(url, headers={"Authorization": f"Bearer {token}"})
+        if self.config.trace_mode:
+            logger.debug(f"Response: {response}")
         if "error" in response:         raise Failed(f"MyAnimeList Error: {response['error']}")
         else:                           return response
 
@@ -177,7 +183,7 @@ class MyAnimeList:
                 logger.debug(data)
                 raise Failed("AniList Error: Connection Failed")
             start_num = (current_page - 1) * 100 + 1
-            util.print_return(f"Parsing Page {current_page}/{num_of_pages} {start_num}-{limit if current_page == num_of_pages else current_page * 100}")
+            logger.ghost(f"Parsing Page {current_page}/{num_of_pages} {start_num}-{limit if current_page == num_of_pages else current_page * 100}")
             if current_page > 1:
                 data = self._jiken_request(f"/genre/anime/{genre_id}/{current_page}")
             if "anime" in data:
@@ -188,7 +194,7 @@ class MyAnimeList:
                 current_page += 1
             else:
                 chances += 1
-        util.print_end()
+        logger.exorcise()
         return mal_ids
 
     def _studio(self, studio_id, limit):

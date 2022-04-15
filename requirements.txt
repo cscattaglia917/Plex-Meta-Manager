@@ -1,11 +1,17 @@
-PlexAPI==4.7.0
-tmdbv3api==1.7.6
-arrapi==1.1.2
-lxml==4.6.3
-requests==2.26.0
-ruamel.yaml==0.17.10
+PlexAPI==4.10.1
+tmdbapis==1.0.3
+arrapi==1.3.1
+lxml==4.8.0
+requests==2.27.1
+ruamel.yaml==0.17.21
 schedule==1.1.0
 retrying==1.3.3
+<<<<<<< HEAD
 pathvalidate==2.4.1
 pillow==8.3.1
 EmbyAPI==4.1.1.0a0
+=======
+pathvalidate==2.5.0
+pillow==9.0.1
+EmbyAPI==4.1.1.0a0
+>>>>>>> 5b270dc41a9529ca2c0e56142d23c92c54c4e593
