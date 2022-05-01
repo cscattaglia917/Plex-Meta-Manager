@@ -146,13 +146,13 @@ class Library(ABC):
         image_compare = None
         poster_uploaded = False
         if self.config.Cache:
-            image, image_compare = self.config.Cache.query_image_map(item.ratingKey, self.image_table_name)
+            image, image_compare = self.config.Cache.query_image_map(item.id, self.image_table_name)
 
         if poster is not None:
             try:
                 if image_compare and str(poster.compare) != str(image_compare):
                     image = None
-                if image is None or image != item.thumb:
+                if image is None:
                     self._upload_image(item, poster)
                     poster_uploaded = True
                     logger.info(f"Detail: {poster.attribute} updated {poster.message}")
@@ -180,7 +180,7 @@ class Library(ABC):
                 temp_image = os.path.join(overlay_folder, f"temp.{ext}")
                 with open(temp_image, "wb") as handler:
                     handler.write(og_image)
-                shutil.copyfile(temp_image, os.path.join(overlay_folder, f"{item.ratingKey}.{ext}"))
+                shutil.copyfile(temp_image, os.path.join(overlay_folder, f"{item.id}.{ext}"))
                 while util.is_locked(temp_image):
                     time.sleep(1)
                 try:
@@ -191,7 +191,7 @@ class Library(ABC):
                     self.upload_file_poster(item, temp_image)
                     self.edit_tags("label", item, add_tags=[f"{overlay_name} Overlay"])
                     poster_uploaded = True
-                    logger.info(f"Detail: Overlay: {overlay_name} applied to {item.title}")
+                    logger.info(f"Detail: Overlay: {overlay_name} applied to {item.name}")
                 except (OSError, BadRequest) as e:
                     logger.stacktrace()
                     raise Failed(f"Overlay Error: {e}")
@@ -201,7 +201,7 @@ class Library(ABC):
             try:
                 image = None
                 if self.config.Cache:
-                    image, image_compare = self.config.Cache.query_image_map(item.ratingKey, f"{self.image_table_name}_backgrounds")
+                    image, image_compare = self.config.Cache.query_image_map(item.id, f"{self.image_table_name}_backgrounds")
                     if str(background.compare) != str(image_compare):
                         image = None
                 if image is None or image != item.art:
@@ -216,7 +216,7 @@ class Library(ABC):
 
         if self.config.Cache:
             if poster_uploaded:
-                self.config.Cache.update_image_map(item.ratingKey, self.image_table_name, item.thumb, poster.compare if poster else "")
+                self.config.Cache.update_image_map(item.id, self.image_table_name, item.image_tags['Primary'], poster.compare if poster else "")
             if background_uploaded:
                 self.config.Cache.update_image_map(item.ratingKey, f"{self.image_table_name}_backgrounds", item.art, background.compare)
 

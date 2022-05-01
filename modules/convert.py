@@ -218,6 +218,25 @@ class Convert:
         # DEBUG :: item_type == plex
         # DEBUG :: check_id == movie
         
+        def update_cache(cache_ids, id_type, imdb_in, guid_type):
+            if self.config.Cache:
+                cache_ids = ",".join([str(c) for c in cache_ids])
+                imdb_in = ",".join([str(i) for i in imdb_in]) if imdb_in else None
+                ids = f"{item.id:<46} | {id_type} ID: {cache_ids:<7} | IMDb ID: {str(imdb_in):<10}"
+                logger.info(f" Cache  |  {'^' if expired else '+'}  | {ids} | {item.name}")
+                self.config.Cache.update_guid_map(item.id, cache_ids, imdb_in, expired, guid_type)
+
+        if self.config.Cache:
+            cache_id, imdb_check, media_type, expired = self.config.Cache.query_guid_map(item.id)
+            if (cache_id or imdb_check) and not expired:
+                media_id_type = "movie" if "movie" in media_type else "show"
+                if item_type == "hama" and check_id.startswith("anidb"):
+                    anidb_id = int(re.search("-(.*)", check_id).group(1))
+                    library.anidb_map[anidb_id] = item.id
+                elif item_type == "myanimelist":
+                    library.mal_map[int(check_id)] = item.id
+                return media_id_type, cache_id, imdb_check
+
         try:
             #print(item)
             #print("DEBUG:: item.provider_ids = ", item.provider_ids)
@@ -256,13 +275,13 @@ class Convert:
                         imdb_id.append(imdb)
 
             if (tmdb_id or imdb_id) and library.is_movie:
-                #update_cache(tmdb_id, "TMDb", imdb_id, "movie")
+                update_cache(tmdb_id, "TMDb", imdb_id, "movie")
                 return "movie", tmdb_id, imdb_id
             elif (tvdb_id or imdb_id) and library.is_show:
-                #update_cache(tvdb_id, "TVDb", imdb_id, "show")
+                update_cache(tvdb_id, "TVDb", imdb_id, "show")
                 return "show", tvdb_id, imdb_id
             elif anidb_id and (tmdb_id or imdb_id) and library.is_show:
-                #update_cache(tmdb_id, "TMDb", imdb_id, "show_movie")
+                update_cache(tmdb_id, "TMDb", imdb_id, "show_movie")
                 return "movie", tmdb_id, imdb_id
             else:
                 logger.debug(f"TMDb: {tmdb_id}, IMDb: {imdb_id}, TVDb: {tvdb_id}")
@@ -273,6 +292,8 @@ class Convert:
             logger.stacktrace()
             logger.info(f'Mapping Error | {item.id:<46} | Bad Request for "{item.name}"')
         return None, None, None
+
+        
 
         #item_type = guid.scheme.split(".")[-1]
         #check_id = guid.netloc

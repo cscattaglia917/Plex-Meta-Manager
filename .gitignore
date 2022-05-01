@@ -15,6 +15,7 @@ config/*
 !config/overlays/*/overlay.png
 !config/*.template
 !overlay.png
+assets/
 build/
 develop-eggs/
 dist/

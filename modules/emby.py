@@ -596,14 +596,19 @@ class Emby(Library):
     def _upload_image(self, item, image):
         try:
             if image.is_poster and image.is_url:
-                item.uploadPoster(url=image.location)
+                #TODO: Update to URL based call
+                embyapi.ImageServiceApi(self.EmbyServer).post_items_by_id_images_by_type(body=image.location, id=item.id, type='Primary')
+                #item.uploadPoster(url=image.location)
             elif image.is_poster:
-                item.uploadPoster(filepath=image.location)
+                type_ = 'Primary'
+                b64string = str(image.b64).strip("b'").rstrip("'")
+                embyapi.ImageServiceApi(self.EmbyServer).post_items_by_id_images_by_type(b64string, item.id, type_)
+                #embyapi.ImageServiceApi(self.EmbyServer).post_items_by_id_images_by_type(image.b64, item.id, type_)
             elif image.is_url:
                 item.uploadArt(url=image.location)
             else:
                 item.uploadArt(filepath=image.location)
-            self.reload(item)
+            #self.reload(item)
         except BadRequest as e:
             item.refresh()
             raise Failed(e)

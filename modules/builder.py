@@ -2498,8 +2498,9 @@ class CollectionBuilder:
         if len(self.posters) > 0:
             logger.debug(f"{len(self.posters)} posters found:")
             for p in self.posters:
-                logger.debug(f"Method: {p} Poster: {self.posters[p]}")
-
+                #Changed debug so that b64 string wouldn't print
+                logger.debug(f"Method: {p} Poster: attribute - {self.posters[p].attribute}  compare - {self.posters[p].compare}  is_poster - {self.posters[p].is_poster} is_url - {self.posters[p].is_url} location - {self.posters[p].location} message - {self.posters[p].message} prefix - {self.posters[p].prefix}")
+            
             if "url_poster" in self.posters:
                 if self.library.download_url_assets and asset_location:
                     if poster_image:

@@ -1,4 +1,5 @@
-import glob, logging, os, re, requests, signal, sys, time
+import base64
+import contextlib, glob, logging, os, re, requests, signal, sys, time
 from datetime import datetime, timedelta
 from pathvalidate import is_valid_filename, sanitize_filename
 from plexapi.audio import Album, Track
@@ -35,6 +36,10 @@ class ImageData:
         self.is_url = is_url
         self.compare = location if is_url else os.stat(location).st_size
         self.message = f"{prefix}{'poster' if is_poster else 'background'} to [{'URL' if is_url else 'File'}] {location}"
+
+        if not is_url:
+            with open(location, "rb") as image:
+                self.b64 = base64.b64encode(image.read())
 
     def __str__(self):
         return str(self.__dict__)

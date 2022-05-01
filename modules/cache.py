@@ -232,7 +232,7 @@ class Cache:
                         for row in cursor.fetchall():
                             if row["type"] == "poster":
                                 final_table = table_name if row["type"] == "poster" else f"{table_name}_backgrounds"
-                                self.update_image_map(row["rating_key"], final_table, row["location"], row["compare"], overlay=row["overlay"])
+                                self.update_image_map(row["id"], final_table, row["location"], row["compare"], overlay=row["overlay"])
                     cursor.execute("DROP TABLE IF EXISTS image_map")
 
     def query_guid_map(self, plex_guid):
@@ -586,7 +586,7 @@ class Cache:
                         cursor.execute(
                             f"""CREATE TABLE IF NOT EXISTS {table_name} (
                             key INTEGER PRIMARY KEY,
-                            rating_key TEXT UNIQUE,
+                            id TEXT UNIQUE,
                             overlay TEXT,
                             compare TEXT,
                             location TEXT)"""
@@ -594,7 +594,7 @@ class Cache:
                         cursor.execute(
                             f"""CREATE TABLE IF NOT EXISTS {table_name}_backgrounds (
                             key INTEGER PRIMARY KEY,
-                            rating_key TEXT UNIQUE,
+                            id TEXT UNIQUE,
                             overlay TEXT,
                             compare TEXT,
                             location TEXT)"""
@@ -609,7 +609,7 @@ class Cache:
                 cursor.execute(f"SELECT * FROM {table_name} WHERE overlay = ?", (overlay,))
                 rows = cursor.fetchall()
                 for row in rows:
-                    rks.append(int(row["rating_key"]))
+                    rks.append(int(row["id"]))
         return rks
 
     def update_remove_overlay(self, table_name, overlay):
@@ -618,22 +618,22 @@ class Cache:
             with closing(connection.cursor()) as cursor:
                 cursor.execute(f"UPDATE {table_name} SET overlay = ? WHERE overlay = ?", ("", overlay))
 
-    def query_image_map(self, rating_key, table_name):
+    def query_image_map(self, id, table_name):
         with sqlite3.connect(self.cache_path) as connection:
             connection.row_factory = sqlite3.Row
             with closing(connection.cursor()) as cursor:
-                cursor.execute(f"SELECT * FROM {table_name} WHERE rating_key = ?", (rating_key,))
+                cursor.execute(f"SELECT * FROM {table_name} WHERE id = ?", (id,))
                 row = cursor.fetchone()
                 if row and row["location"]:
                     return row["location"], row["compare"]
         return None, None
 
-    def update_image_map(self, rating_key, table_name, location, compare, overlay=""):
+    def update_image_map(self, id, table_name, location, compare, overlay=""):
         with sqlite3.connect(self.cache_path) as connection:
             connection.row_factory = sqlite3.Row
             with closing(connection.cursor()) as cursor:
-                cursor.execute(f"INSERT OR IGNORE INTO {table_name}(rating_key) VALUES(?)", (rating_key,))
-                cursor.execute(f"UPDATE {table_name} SET location = ?, compare = ?, overlay = ? WHERE rating_key = ?", (location, compare, overlay, rating_key))
+                cursor.execute(f"INSERT OR IGNORE INTO {table_name}(id) VALUES(?)", (id,))
+                cursor.execute(f"UPDATE {table_name} SET location = ?, compare = ?, overlay = ? WHERE id = ?", (location, compare, overlay, id))
 
     def query_radarr_adds(self, tmdb_id, library):
         return self.query_arr_adds(tmdb_id, library, "radarr", "tmdb_id")

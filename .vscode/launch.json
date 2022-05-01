@@ -12,7 +12,7 @@
             "program": "plex_meta_manager.py",
             "args": [
                 "-r", 
-                "--debug", "--trace",
+                "--debug",
                 "--collections-only",
                 "--run-collections", "Captain America"
             ],
