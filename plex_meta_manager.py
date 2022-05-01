@@ -118,6 +118,280 @@ with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")) a
 
 plexapi.BASE_HEADERS["X-Plex-Client-Identifier"] = "Plex-Meta-Manager"
 
+
+def embyStart(attrs):
+    logger.add_main_handler()
+    logger.separator()
+    logger.info("")
+    logger.info_center(" ____  _             __  __      _          __  __                                   ")
+    logger.info_center("|  _ \\| | _____  __ |  \\/  | ___| |_ __ _  |  \\/  | __ _ _ __   __ _  __ _  ___ _ __ ")
+    logger.info_center("| |_) | |/ _ \\ \\/ / | |\\/| |/ _ \\ __/ _` | | |\\/| |/ _` | '_ \\ / _` |/ _` |/ _ \\ '__|")
+    logger.info_center("|  __/| |  __/>  <  | |  | |  __/ || (_| | | |  | | (_| | | | | (_| | (_| |  __/ |   ")
+    logger.info_center("|_|   |_|\\___/_/\\_\\ |_|  |_|\\___|\\__\\__,_| |_|  |_|\\__,_|_| |_|\\__,_|\\__, |\\___|_|   ")
+    logger.info_center("                                                                     |___/           ")
+    logger.info(f"    Version: {version[0]}")
+
+    latest_version = util.current_version()
+    new_version = latest_version[0] if latest_version and (version[1] != latest_version[1] or (version[2] and version[2] < latest_version[2])) else None
+    if new_version:
+        logger.info(f"    Newest Version: {new_version}")
+    if "time" in attrs and attrs["time"]:                   start_type = f"{attrs['time']} "
+    elif "test" in attrs and attrs["test"]:                 start_type = "Test "
+    elif "collections" in attrs and attrs["collections"]:   start_type = "Collections "
+    elif "libraries" in attrs and attrs["libraries"]:       start_type = "Libraries "
+    else:                                                   start_type = ""
+    start_time = datetime.now()
+    if "time" not in attrs:
+        attrs["time"] = start_time.strftime("%H:%M")
+    attrs["time_obj"] = start_time
+    attrs["read_only"] = read_only_config
+    attrs["version"] = version
+    attrs["latest_version"] = latest_version
+    logger.separator(debug=True)
+    logger.debug(f"--config (PMM_CONFIG): {config_file}")
+    logger.debug(f"--time (PMM_TIME): {times}")
+    logger.debug(f"--run (PMM_RUN): {run}")
+    logger.debug(f"--run-tests (PMM_TEST): {test}")
+    logger.debug(f"--collections-only (PMM_COLLECTIONS_ONLY): {collection_only}")
+    logger.debug(f"--libraries-only (PMM_LIBRARIES_ONLY): {library_only}")
+    logger.debug(f"--libraries-first (PMM_LIBRARIES_FIRST): {library_first}")
+    logger.debug(f"--run-collections (PMM_COLLECTIONS): {collections}")
+    logger.debug(f"--run-libraries (PMM_LIBRARIES): {libraries}")
+    logger.debug(f"--run-metadata-files (PMM_METADATA_FILES): {metadata_files}")
+    logger.debug(f"--ignore-schedules (PMM_IGNORE_SCHEDULES): {ignore_schedules}")
+    logger.debug(f"--ignore-ghost (PMM_IGNORE_GHOST): {ignore_ghost}")
+    logger.debug(f"--delete-collections (PMM_DELETE_COLLECTIONS): {delete}")
+    logger.debug(f"--resume (PMM_RESUME): {resume}")
+    logger.debug(f"--no-countdown (PMM_NO_COUNTDOWN): {no_countdown}")
+    logger.debug(f"--no-missing (PMM_NO_MISSING): {no_missing}")
+    logger.debug(f"--read-only-config (PMM_READ_ONLY_CONFIG): {read_only_config}")
+    logger.debug(f"--divider (PMM_DIVIDER): {divider}")
+    logger.debug(f"--width (PMM_WIDTH): {screen_width}")
+    logger.debug(f"--debug (PMM_DEBUG): {debug}")
+    logger.debug(f"--trace (PMM_TRACE): {trace}")
+    logger.debug("")
+    logger.separator(f"Starting {start_type}Run")
+    config = None
+    stats = {"created": 0, "modified": 0, "deleted": 0, "added": 0, "unchanged": 0, "removed": 0, "radarr": 0, "sonarr": 0}
+    try:
+        config = ConfigFile(default_dir, attrs)
+    except Exception as e:
+        logger.stacktrace()
+        logger.critical(e)
+    else:
+        try:
+            stats = update_emby_libraries(config)
+        except Exception as e:
+            config.notify(e)
+            logger.stacktrace()
+            logger.critical(e)
+    logger.info("")
+    end_time = datetime.now()
+    run_time = str(end_time - start_time).split(".")[0]
+    if config:
+        try:
+            config.Webhooks.end_time_hooks(start_time, end_time, run_time, stats)
+        except Failed as e:
+            logger.stacktrace()
+            logger.error(f"Webhooks Error: {e}")
+    version_line = f"Version: {version[0]}"
+    if new_version:
+        version_line = f"{version_line}        Newest Version: {new_version}"
+    logger.separator(f"Finished {start_type}Run\n{version_line}\nFinished: {end_time.strftime('%H:%M:%S %Y-%m-%d')} Run Time: {run_time}")
+    logger.remove_main_handler()
+
+def update_emby_libraries(config):
+    for library in config.libraries:
+        if library.skip_library:
+            logger.info("")
+            logger.separator(f"Skipping {library.name} Library")
+            continue
+        try:
+            logger.add_library_handler(library.mapping_name)
+            #plexapi.server.TIMEOUT = library.timeout
+            logger.info("")
+            logger.separator(f"{library.name} Library")
+
+            if config.library_first and library.library_operation and not config.test_mode and not collection_only:
+                #TODO: Replace with Emby specific operations
+                library_operations(config, library)
+
+            logger.debug("")
+            logger.debug(f"Mapping Name: {library.original_mapping_name}")
+            logger.debug(f"Folder Name: {library.mapping_name}")
+            logger.debug(f"Missing Path: {library.missing_path}")
+            for ad in library.asset_directory:
+                logger.debug(f"Asset Directory: {ad}")
+            logger.debug(f"Asset Folders: {library.asset_folders}")
+            logger.debug(f"Create Asset Folders: {library.create_asset_folders}")
+            logger.debug(f"Download URL Assets: {library.download_url_assets}")
+            logger.debug(f"Sync Mode: {library.sync_mode}")
+            logger.debug(f"Minimum Items: {library.minimum_items}")
+            logger.debug(f"Delete Below Minimum: {library.delete_below_minimum}")
+            logger.debug(f"Delete Not Scheduled: {library.delete_not_scheduled}")
+            logger.debug(f"Default Collection Order: {library.default_collection_order}")
+            logger.debug(f"Missing Only Released: {library.missing_only_released}")
+            logger.debug(f"Only Filter Missing: {library.only_filter_missing}")
+            logger.debug(f"Show Unmanaged: {library.show_unmanaged}")
+            logger.debug(f"Show Filtered: {library.show_filtered}")
+            logger.debug(f"Show Missing: {library.show_missing}")
+            logger.debug(f"Show Missing Assets: {library.show_missing_assets}")
+            logger.debug(f"Save Missing: {library.save_missing}")
+            #logger.debug(f"Clean Bundles: {library.clean_bundles}")
+            #logger.debug(f"Empty Trash: {library.empty_trash}")
+            #logger.debug(f"Optimize: {library.optimize}")
+            #logger.debug(f"Timeout: {library.timeout}")
+
+            if config.delete_collections:
+                logger.info("")
+                logger.separator(f"Deleting all Collections from the {library.name} Library", space=False, border=False)
+                logger.info("")
+                for collection in library.get_all_collections():
+                    logger.info(f"Collection {collection.title} Deleted")
+                    library.query(collection.delete)
+            if not library.is_other and not library.is_music and (library.metadata_files or library.original_mapping_name in config.library_map) and not library_only:
+                logger.info("")
+                logger.separator(f"Mapping {library.name} Library", space=False, border=False)
+                logger.info("")
+                library.map_guids()
+            for metadata in library.metadata_files:
+                metadata_name = metadata.get_file_name()
+                if config.requested_metadata_files and metadata_name not in config.requested_metadata_files:
+                    logger.info("")
+                    logger.separator(f"Skipping {metadata_name} Metadata File")
+                    continue
+                logger.info("")
+                logger.separator(f"Running {metadata_name} Metadata File\n{metadata.path}")
+                if not config.test_mode and not config.resume_from and not collection_only:
+                    try:
+                        metadata.update_metadata()
+                    except Failed as e:
+                        library.notify(e)
+                        logger.error(e)
+                collections_to_run = metadata.get_collections(config.requested_collections)
+                if config.resume_from and config.resume_from not in collections_to_run:
+                    logger.info("")
+                    logger.warning(f"Collection: {config.resume_from} not in Metadata File: {metadata.path}")
+                    continue
+                if collections_to_run and not library_only:
+                    logger.info("")
+                    logger.separator(f"{'Test ' if config.test_mode else ''}Collections")
+                    logger.remove_library_handler(library.mapping_name)
+                    run_collection(config, library, metadata, collections_to_run)
+                    logger.re_add_library_handler(library.mapping_name)
+
+            if not config.library_first and library.library_operation and not config.test_mode and not collection_only:
+                library_operations(config, library)
+
+            logger.remove_library_handler(library.mapping_name)
+        except Exception as e:
+            #library.notify(e)
+            logger.stacktrace()
+            logger.critical(e)
+
+    playlist_status = {}
+    playlist_stats = {}
+    if config.playlist_files:
+        logger.add_playlists_handler()
+        playlist_status, playlist_stats = run_playlists(config)
+        logger.remove_playlists_handler()
+
+    has_run_again = False
+    for library in config.libraries:
+        if library.run_again:
+            has_run_again = True
+            break
+
+    amount_added = 0
+    if has_run_again and not library_only:
+        logger.info("")
+        logger.separator("Run Again")
+        logger.info("")
+        for x in range(1, config.general["run_again_delay"] + 1):
+            logger.ghost(f"Waiting to run again in {config.general['run_again_delay'] - x + 1} minutes")
+            for y in range(60):
+                time.sleep(1)
+        logger.exorcise()
+        for library in config.libraries:
+            if library.run_again:
+                try:
+                    logger.re_add_library_handler(library.mapping_name)
+                    os.environ["PLEXAPI_PLEXAPI_TIMEOUT"] = str(library.timeout)
+                    logger.info("")
+                    logger.separator(f"{library.name} Library Run Again")
+                    logger.info("")
+                    library.map_guids()
+                    for builder in library.run_again:
+                        logger.info("")
+                        logger.separator(f"{builder.name} Collection in {library.name}")
+                        logger.info("")
+                        try:
+                            amount_added += builder.run_collections_again()
+                        except Failed as e:
+                            library.notify(e, collection=builder.name, critical=False)
+                            logger.stacktrace()
+                            logger.error(e)
+                    logger.remove_library_handler(library.mapping_name)
+                except Exception as e:
+                    library.notify(e)
+                    logger.stacktrace()
+                    logger.critical(e)
+
+    longest = 20
+    for library in config.libraries:
+        for title in library.status:
+            if len(title) > longest:
+                longest = len(title)
+    if playlist_status:
+        for title in playlist_status:
+            if len(title) > longest:
+                longest = len(title)
+
+    def print_status(section, status):
+        logger.info("")
+        logger.separator(f"{section} Summary", space=False, border=False)
+        logger.info("")
+        logger.info(f"{'Title':^{longest}} |  +  |  =  |  -  | {'Status':^13}")
+        breaker = f"{logger.separating_character * longest}|{logger.separating_character * 5}|{logger.separating_character * 5}|{logger.separating_character * 5}|"
+        logger.separator(breaker, space=False, border=False, side_space=False, left=True)
+        for name, data in status.items():
+            logger.info(f"{name:<{longest}} | {data['added']:^3} | {data['unchanged']:^3} | {data['removed']:^3} | {data['status']}")
+            if data["errors"]:
+                for error in data["errors"]:
+                    logger.info(error)
+                logger.info("")
+
+    logger.separator("Summary")
+    for library in config.libraries:
+        print_status(library.name, library.status)
+    if playlist_status:
+        print_status("Playlists", playlist_status)
+
+    stats = {"created": 0, "modified": 0, "deleted": 0, "added": 0, "unchanged": 0, "removed": 0, "radarr": 0, "sonarr": 0, "names": []}
+    stats["added"] += amount_added
+    for library in config.libraries:
+        stats["created"] += library.stats["created"]
+        stats["modified"] += library.stats["modified"]
+        stats["deleted"] += library.stats["deleted"]
+        stats["added"] += library.stats["added"]
+        stats["unchanged"] += library.stats["unchanged"]
+        stats["removed"] += library.stats["removed"]
+        stats["radarr"] += library.stats["radarr"]
+        stats["sonarr"] += library.stats["sonarr"]
+        stats["names"].extend([{"name": n, "library": library.name} for n in library.stats["names"]])
+    if playlist_stats:
+        stats["created"] += playlist_stats["created"]
+        stats["modified"] += playlist_stats["modified"]
+        stats["deleted"] += playlist_stats["deleted"]
+        stats["added"] += playlist_stats["added"]
+        stats["unchanged"] += playlist_stats["unchanged"]
+        stats["removed"] += playlist_stats["removed"]
+        stats["radarr"] += playlist_stats["radarr"]
+        stats["sonarr"] += playlist_stats["sonarr"]
+        stats["names"].extend([{"name": n, "library": "PLAYLIST"} for n in playlist_stats["names"]])
+    return stats
+
+
 def start(attrs):
     logger.add_main_handler()
     logger.separator()
@@ -775,11 +1049,11 @@ def library_operations(config, library):
         logger.info("")
     unmanaged_collections = []
     for col in library.get_all_collections():
-        if (library.delete_collections_with_less and col.childCount < library.delete_collections_with_less) \
-            or (library.delete_unmanaged_collections and col.title not in library.collections):
-            library.query(col.delete)
+        if (library.delete_collections_with_less and col.child_count < library.delete_collections_with_less) \
+            or (library.delete_unmanaged_collections and col.name not in library.collections):
+            library.query(col.delete) #TODO: adjust for Emby
             logger.info(f"{col.title} Deleted")
-        elif col.title not in library.collections:
+        elif col.name not in library.collections:
             unmanaged_collections.append(col)
     if library.mass_collection_mode:
         logger.info("")
@@ -793,7 +1067,7 @@ def library_operations(config, library):
         logger.separator(f"Unmanaged Collections in {library.name} Library", space=False, border=False)
         logger.info("")
         for col in unmanaged_collections:
-            logger.info(col.title)
+            logger.info(col.name)
         logger.info("")
         logger.info(f"{len(unmanaged_collections)} Unmanaged Collection{'s' if len(unmanaged_collections) > 1 else ''}")
     elif library.show_unmanaged:
@@ -1190,7 +1464,7 @@ def run_playlists(config):
 
 try:
     if run or test or collections or libraries or metadata_files or resume:
-        start({
+        embyStart({
             "config_file": config_file,
             "test": test,
             "delete": delete,
@@ -1202,6 +1476,18 @@ try:
             "resume": resume,
             "trace": trace
         })
+        # start({
+        #     "config_file": config_file,
+        #     "test": test,
+        #     "delete": delete,
+        #     "ignore_schedules": ignore_schedules,
+        #     "collections": collections,
+        #     "libraries": libraries,
+        #     "metadata_files": metadata_files,
+        #     "library_first": library_first,
+        #     "resume": resume,
+        #     "trace": trace
+        # })
     else:
         times_to_run = util.get_list(times)
         valid_times = []

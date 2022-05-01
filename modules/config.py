@@ -6,6 +6,7 @@ from modules.anidb import AniDB
 from modules.anilist import AniList
 from modules.cache import Cache
 from modules.convert import Convert
+from modules.emby import Emby
 from modules.ergast import Ergast
 from modules.flixpatrol import FlixPatrol
 from modules.icheckmovies import ICheckMovies
@@ -104,6 +105,12 @@ class ConfigFile:
             replace_attr(new_config, "show_filtered", "plex")
             replace_attr(new_config, "show_missing", "plex")
             replace_attr(new_config, "save_missing", "plex")
+            replace_attr(new_config, "asset_directory", "emby")
+            replace_attr(new_config, "sync_mode", "emby")
+            replace_attr(new_config, "show_unmanaged", "emby")
+            replace_attr(new_config, "show_filtered", "emby")
+            replace_attr(new_config, "show_missing", "emby")
+            replace_attr(new_config, "save_missing", "emby")
             if new_config["libraries"]:
                 for library in new_config["libraries"]:
                     if not new_config["libraries"][library]:
@@ -119,6 +126,13 @@ class ConfigFile:
                         replace_attr(new_config["libraries"][library], "show_filtered", "plex")
                         replace_attr(new_config["libraries"][library], "show_missing", "plex")
                         replace_attr(new_config["libraries"][library], "save_missing", "plex")
+                    if "emby" in new_config["libraries"][library] and new_config["libraries"][library]["emby"]:
+                        replace_attr(new_config["libraries"][library], "asset_directory", "emby")
+                        replace_attr(new_config["libraries"][library], "sync_mode", "emby")
+                        replace_attr(new_config["libraries"][library], "show_unmanaged", "emby")
+                        replace_attr(new_config["libraries"][library], "show_filtered", "emby")
+                        replace_attr(new_config["libraries"][library], "show_missing", "emby")
+                        replace_attr(new_config["libraries"][library], "save_missing", "emby")
                     if "settings" in new_config["libraries"][library] and new_config["libraries"][library]["settings"]:
                         if "collection_minimum" in new_config["libraries"][library]["settings"]:
                             new_config["libraries"][library]["settings"]["minimum_items"] = new_config["libraries"][library]["settings"].pop("collection_minimum")
@@ -168,6 +182,7 @@ class ConfigFile:
                     temp["changes"] = None if not changes else changes if len(changes) > 1 else changes[0]
                 new_config["webhooks"] = temp
             if "plex" in new_config:                        new_config["plex"] = new_config.pop("plex")
+            if "emby" in new_config:                        new_config["emby"] = new_config.pop("emby")
             if "tmdb" in new_config:                        new_config["tmdb"] = new_config.pop("tmdb")
             if "tautulli" in new_config:                    new_config["tautulli"] = new_config.pop("tautulli")
             if "omdb" in new_config:                        new_config["omdb"] = new_config.pop("omdb")
@@ -550,16 +565,21 @@ class ConfigFile:
 
             logger.separator()
 
-            logger.info("Connecting to Plex Libraries...")
+            logger.info("Connecting to Emby Libraries...")
 
-            self.general["plex"] = {
-                "url": check_for_attribute(self.data, "url", parent="plex", var_type="url", default_is_none=True),
-                "token": check_for_attribute(self.data, "token", parent="plex", default_is_none=True),
-                "timeout": check_for_attribute(self.data, "timeout", parent="plex", var_type="int", default=60),
-                "clean_bundles": check_for_attribute(self.data, "clean_bundles", parent="plex", var_type="bool", default=False),
-                "empty_trash": check_for_attribute(self.data, "empty_trash", parent="plex", var_type="bool", default=False),
-                "optimize": check_for_attribute(self.data, "optimize", parent="plex", var_type="bool", default=False)
+            self.general["emby"] = {
+                "url": check_for_attribute(self.data, "url", parent="emby", var_type="url", default_is_none=True),
+                "api_key": check_for_attribute(self.data, "api_key", parent="emby", default_is_none=True),
+                "user_name": check_for_attribute(self.data, "user_name", parent="emby", default_is_none=True)
             }
+            # self.general["plex"] = {
+            #     "url": check_for_attribute(self.data, "url", parent="plex", var_type="url", default_is_none=True),
+            #     "token": check_for_attribute(self.data, "token", parent="plex", default_is_none=True),
+            #     "timeout": check_for_attribute(self.data, "timeout", parent="plex", var_type="int", default=60),
+            #     "clean_bundles": check_for_attribute(self.data, "clean_bundles", parent="plex", var_type="bool", default=False),
+            #     "empty_trash": check_for_attribute(self.data, "empty_trash", parent="plex", var_type="bool", default=False),
+            #     "optimize": check_for_attribute(self.data, "optimize", parent="plex", var_type="bool", default=False)
+            # }
             self.general["radarr"] = {
                 "url": check_for_attribute(self.data, "url", parent="radarr", var_type="url", default_is_none=True),
                 "token": check_for_attribute(self.data, "token", parent="radarr", default_is_none=True),
@@ -855,16 +875,21 @@ class ConfigFile:
                                 params["skip_library"] = True
 
                     logger.info("")
-                    logger.separator("Plex Configuration", space=False, border=False)
-                    params["plex"] = {
-                        "url": check_for_attribute(lib, "url", parent="plex", var_type="url", default=self.general["plex"]["url"], req_default=True, save=False),
-                        "token": check_for_attribute(lib, "token", parent="plex", default=self.general["plex"]["token"], req_default=True, save=False),
-                        "timeout": check_for_attribute(lib, "timeout", parent="plex", var_type="int", default=self.general["plex"]["timeout"], save=False),
-                        "clean_bundles": check_for_attribute(lib, "clean_bundles", parent="plex", var_type="bool", default=self.general["plex"]["clean_bundles"], save=False),
-                        "empty_trash": check_for_attribute(lib, "empty_trash", parent="plex", var_type="bool", default=self.general["plex"]["empty_trash"], save=False),
-                        "optimize": check_for_attribute(lib, "optimize", parent="plex", var_type="bool", default=self.general["plex"]["optimize"], save=False)
+                    logger.separator("Emby Configuration", space=False, border=False)
+                    params["emby"] = {
+                        "url": check_for_attribute(lib, "url", parent="emby", var_type="url", default=self.general["emby"]["url"], req_default=True, save=False),
+                        "api_key": check_for_attribute(lib, "api_key", parent="emby", default=self.general["emby"]["api_key"], req_default=True, save=False),
+                        "user_name": check_for_attribute(lib, "user_name", parent="emby", default=self.general["emby"]["user_name"], req_default=True, save=False)
                     }
-                    library = Plex(self, params)
+                    # params["plex"] = {
+                    #     "url": check_for_attribute(lib, "url", parent="plex", var_type="url", default=self.general["plex"]["url"], req_default=True, save=False),
+                    #     "token": check_for_attribute(lib, "token", parent="plex", default=self.general["plex"]["token"], req_default=True, save=False),
+                    #     "timeout": check_for_attribute(lib, "timeout", parent="plex", var_type="int", default=self.general["plex"]["timeout"], save=False),
+                    #     "clean_bundles": check_for_attribute(lib, "clean_bundles", parent="plex", var_type="bool", default=self.general["plex"]["clean_bundles"], save=False),
+                    #     "empty_trash": check_for_attribute(lib, "empty_trash", parent="plex", var_type="bool", default=self.general["plex"]["empty_trash"], save=False),
+                    #     "optimize": check_for_attribute(lib, "optimize", parent="plex", var_type="bool", default=self.general["plex"]["optimize"], save=False)
+                    # }
+                    library = Emby(self, params)
                     logger.info(f"{display_name} Library Connection Successful")
                 except Failed as e:
                     self.errors.append(e)
@@ -884,7 +909,15 @@ class ConfigFile:
                     logger.info("")
                     logger.info(f"{display_name} Metadata Failed to Load")
                     continue
-
+                if self.general["emby"]["url"]:
+                    logger.info("")
+                    logger.separator("Emby Configuration", space=False, border=False)
+                    params["emby"] = {
+                        "url": check_for_attribute(lib, "url", parent="emby", var_type="url", default=self.general["emby"]["url"], req_default=True, save=False),
+                        "api_key": check_for_attribute(lib, "api_key", parent="emby", default=self.general["emby"]["api_key"], req_default=True, save=False),
+                        "user_name": check_for_attribute(lib, "user_name", parent="emby", default=self.general["emby"]["user_name"], req_default=True, save=False)
+                    }
+                    embyLibrary = Emby(self, params)
                 if self.general["radarr"]["url"] or (lib and "radarr" in lib):
                     logger.info("")
                     logger.separator("Radarr Configuration", space=False, border=False)

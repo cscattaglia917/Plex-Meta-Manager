@@ -264,8 +264,9 @@ class CollectionBuilder:
                 raise Failed("Playlist Error: libraries attribute is required")
         else:
             self.libraries.append(self.library)
-
-        self.language = self.library.Plex.language
+        
+        self.language = 'English'
+        #self.language = self.library.Plex.language
         self.details = {
             "show_filtered": self.library.show_filtered,
             "show_options": self.library.show_options,
@@ -709,20 +710,20 @@ class CollectionBuilder:
         if self.build_collection:
             try:
                 self.obj = self.library.get_playlist(self.name) if self.playlist else self.library.get_collection(self.name)
-                if (self.smart and not self.obj.smart) or (not self.smart and self.obj.smart):
-                    logger.info("")
-                    logger.error(f"{self.Type} Error: Converting {self.obj.title} to a {'smart' if self.smart else 'normal'} collection")
-                    self.library.query(self.obj.delete)
-                    self.obj = None
+                #if (self.smart and not self.obj.smart) or (not self.smart and self.obj.smart):
+                #    logger.info("")
+                #    logger.error(f"{self.Type} Error: Converting {self.obj.title} to a {'smart' if self.smart else 'normal'} collection")
+                #    self.library.query(self.obj.delete)
+                #    self.obj = None
             except Failed:
                 self.obj = None
 
             if self.obj:
                 self.exists = True
                 if not self.playlist:
-                    self.beginning_count = self.obj.childCount
+                    self.beginning_count = self.obj.child_count
                 if self.sync or self.playlist:
-                    self.remove_item_map = {i.ratingKey: i for i in self.library.get_collection_items(self.obj, self.smart_label_collection)}
+                    self.remove_item_map = {i.id: i for i in self.library.get_collection_items(self.obj.name, self.smart_label_collection)}
                     if self.playlist:
                         self.beginning_count = len(self.remove_item_map)
         else:
@@ -1461,6 +1462,7 @@ class CollectionBuilder:
                     if input_id not in self.ignore_ids:
                         found = False
                         for pl_library in self.libraries:
+                            #print(pl_library.movie_map)
                             if input_id in pl_library.movie_map:
                                 found = True
                                 rating_keys = pl_library.movie_map[input_id]
@@ -1535,26 +1537,31 @@ class CollectionBuilder:
             logger.exorcise()
         if not items:
             return None
-        name = self.obj.title if self.obj else self.name
+        name = self.obj.name if self.obj else self.name
         total = len(items)
         max_length = len(str(total))
         if (self.filters or self.tmdb_filters) and self.details["show_filtered"] is True:
             logger.info("")
             logger.info("Filtering Builders:")
         for i, item in enumerate(items, 1):
-            if not isinstance(item, (Movie, Show, Season, Episode, Artist, Album, Track)):
+            #print(type(item.items))
+            #print(item.items[0].type)
+            item = item.items[0]
+            itemType = item.type
+            if not itemType in ["Movie", "Series", "Season", "Episode", "MusicArtist", "MusicAlbum", "Audio"]:
                 logger.error(f"{self.Type} Error: Item: {item} is an invalid type")
                 continue
             if item not in self.added_items:
-                if item.ratingKey in self.filtered_keys:
+                if item.id in self.filtered_keys:
                     if self.details["show_filtered"] is True:
-                        logger.info(f"{name} {self.Type} | X | {self.filtered_keys[item.ratingKey]}")
+                        logger.info(f"{name} {self.Type} | X | {self.filtered_keys[item.id]}")
                 else:
-                    current_title = util.item_title(item)
+                    current_title = item.name
+                    #current_title = util.item_title(item)
                     if self.check_filters(item, f"{(' ' * (max_length - len(str(i))))}{i}/{total}"):
                         self.added_items.append(item)
                     else:
-                        self.filtered_keys[item.ratingKey] = current_title
+                        self.filtered_keys[item.id] = current_title
                         if self.details["show_filtered"] is True:
                             logger.info(f"{name} {self.Type} | X | {current_title}")
 
@@ -1847,8 +1854,11 @@ class CollectionBuilder:
 
     def fetch_item(self, item):
         try:
-            current = self.library.fetchItem(item.ratingKey if isinstance(item, (Movie, Show, Season, Episode, Artist, Album, Track)) else int(item))
-            if not isinstance(current, (Movie, Show, Season, Episode, Artist, Album, Track)):
+            #print("DEBUG :: ", item.ratingKey)
+            current = self.library.fetchItem(item)
+            #current = self.library.fetchItem(item.ratingKey if isinstance(item, (Movie, Show, Season, Episode, Artist, Album, Track)) else int(item))
+            itemType = current.items[0].type
+            if not itemType in ["Movie", "Series", "Season", "Episode", "MusicArtist", "MusicAlbum", "Audio"]:
                 raise NotFound
             return current
         except (BadRequest, NotFound):
@@ -1858,7 +1868,8 @@ class CollectionBuilder:
         logger.info("")
         logger.separator(f"Adding to {self.name} {self.Type}", space=False, border=False)
         logger.info("")
-        name, collection_items = self.library.get_collection_name_and_items(self.obj if self.obj else self.name, self.smart_label_collection)
+
+        name, collection_items, collection_id = self.library.get_collection_name_and_items(self.obj.name if self.obj else self.name, self.smart_label_collection)
         total = self.limit if self.limit and len(self.added_items) > self.limit else len(self.added_items)
         spacing = len(str(total)) * 2 + 1
         amount_added = 0
@@ -1871,15 +1882,15 @@ class CollectionBuilder:
                 break
             current_operation = "=" if item in collection_items else "+"
             number_text = f"{i}/{total}"
-            logger.info(f"{number_text:>{spacing}} | {name} {self.Type} | {current_operation} | {util.item_title(item)}")
+            logger.info(f"{number_text:>{spacing}} | {name} {self.Type} | {current_operation} | {item.name}")
             if item in collection_items:
-                self.remove_item_map[item.ratingKey] = None
+                self.remove_item_map[item.id] = None
                 amount_unchanged += 1
             else:
                 if self.playlist:
                     playlist_adds.append(item)
                 else:
-                    self.library.alter_collection(item, name, smart_label_collection=self.smart_label_collection)
+                    self.library.alter_collection(item, collection_id, smart_label_collection=self.smart_label_collection)
                 amount_added += 1
                 if self.details["changes_webhooks"]:
                     if item.ratingKey in self.library.movie_rating_key_map:
@@ -2403,19 +2414,31 @@ class CollectionBuilder:
                     logger.error("Details: Failed to Update Please delete the collection and run again")
                 logger.info("")
         else:
-            self.obj.batchEdits()
+            #Editing metadata of collection
+            #self.obj.batchEdits()
 
+            #No good batch edit function with Emby API.  Will need to build the data to send and then send all at once via 
+            #ItemUpdateServiceAPI
             batch_display = "Collection Metadata Edits"
-            if summary and str(summary) != str(self.obj.summary):
-                self.obj.editSummary(summary)
+            if summary and str(summary) != str(self.obj.overview):
+                self.obj.overview = summary
                 batch_display += f"\nSummary | {summary:<25}"
 
-            if "sort_title" in self.details and str(self.details["sort_title"]) != str(self.obj.titleSort):
-                self.obj.editSortTitle(self.details["sort_title"])
+            if "sort_title" in self.details and str(self.details["sort_title"]) != str(self.obj.sort_name):
+                self.obj.forced_sort_name = self.details["sort_title"]
                 batch_display += f"\nSort Title | {self.details['sort_title']}"
 
-            if "content_rating" in self.details and str(self.details["content_rating"]) != str(self.obj.contentRating):
-                self.obj.editContentRating(self.details["content_rating"])
+            if "collection_order" in self.details:
+                if self.obj.display_order != self.details["collection_order"]:
+                    if self.details["collection_order"] == 'release':
+                        self.obj.display_order  = 'PremiereDate'
+                    elif self.details["collection_order"] == 'alpha':
+                        self.obj.display_order = 'SortName'
+                    #elif self.details["collection_order"] == 'sort':
+                    logger.info(f"Collection Order | {self.details['collection_order']}")
+
+            if "content_rating" in self.details and str(self.details["content_rating"]) != str(self.obj.official_rating):
+                self.obj.official_rating = self.details["content_rating"]
                 batch_display += f"\nContent Rating | {self.details['content_rating']}"
 
             add_tags = self.details["label"] if "label" in self.details else None
@@ -2426,7 +2449,7 @@ class CollectionBuilder:
             logger.info(batch_display)
             if len(batch_display) > 25:
                 try:
-                    self.obj.saveEdits()
+                    self.library.update_item(self.obj, self.obj.id)
                     logger.info("Details: have been updated")
                 except NotFound:
                     logger.error("Details: Failed to Update Please delete the collection and run again")
@@ -2434,12 +2457,6 @@ class CollectionBuilder:
 
             if "collection_mode" in self.details:
                 self.library.collection_mode_query(self.obj, self.details["collection_mode"])
-
-            if "collection_order" in self.details:
-                if int(self.obj.collectionSort) not in plex.collection_order_keys\
-                        or plex.collection_order_keys[int(self.obj.collectionSort)] != self.details["collection_order"]:
-                    self.library.collection_order_query(self.obj, self.details["collection_order"])
-                    logger.info(f"Collection Order | {self.details['collection_order']}")
 
             if "visible_library" in self.details or "visible_home" in self.details or "visible_shared" in self.details:
                 visibility = self.library.collection_visibility(self.obj)
