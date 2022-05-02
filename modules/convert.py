@@ -210,13 +210,8 @@ class Convert:
         tvdb_id = []
         imdb_id = []
         anidb_id = None
-        # print("DEBUG :: Item passed through to get_id function == ")
-        # print("DEBUG :: ", item)
         guid = item.id
         item_type = item.type
-        # DEBUG :: guid == ParseResult(scheme='plex', netloc='movie', path='/5d7768244de0ee001fcc7fed', params='', query='', fragment='')
-        # DEBUG :: item_type == plex
-        # DEBUG :: check_id == movie
         
         def update_cache(cache_ids, id_type, imdb_in, guid_type):
             if self.config.Cache:
@@ -238,15 +233,11 @@ class Convert:
                 return media_id_type, cache_id, imdb_check
 
         try:
-            #print(item)
-            #print("DEBUG:: item.provider_ids = ", item.provider_ids)
             for provider_id in item.provider_ids:
-                #print("DEBUG::provider_id==", provider_id)
                 if provider_id.lower() == 'imdb':
                     imdb_id.append(item.provider_ids[provider_id])
                 if provider_id.lower() == 'tmdb':
                     tmdb_id.append(int(item.provider_ids[provider_id]))
-                #print("DEBUG::provider_id ==", item.provider_ids[provider_id])
 
             if not tmdb_id and imdb_id:
                 for imdb in imdb_id:

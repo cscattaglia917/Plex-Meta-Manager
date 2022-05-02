@@ -28,7 +28,7 @@ class Cache:
                 cursor.execute(
                     """CREATE TABLE IF NOT EXISTS guids_map (
                     key INTEGER PRIMARY KEY,
-                    plex_guid TEXT UNIQUE,
+                    emby_guid TEXT UNIQUE,
                     t_id TEXT,
                     imdb_id TEXT,
                     media_type TEXT,
@@ -235,7 +235,7 @@ class Cache:
                                 self.update_image_map(row["id"], final_table, row["location"], row["compare"], overlay=row["overlay"])
                     cursor.execute("DROP TABLE IF EXISTS image_map")
 
-    def query_guid_map(self, plex_guid):
+    def query_guid_map(self, emby_guid):
         id_to_return = None
         imdb_id = None
         media_type = None
@@ -243,7 +243,7 @@ class Cache:
         with sqlite3.connect(self.cache_path) as connection:
             connection.row_factory = sqlite3.Row
             with closing(connection.cursor()) as cursor:
-                cursor.execute(f"SELECT * FROM guids_map WHERE plex_guid = ?", (plex_guid,))
+                cursor.execute(f"SELECT * FROM guids_map WHERE emby_guid = ?", (emby_guid,))
                 row = cursor.fetchone()
                 if row:
                     time_between_insertion = datetime.now() - datetime.strptime(row["expiration_date"], "%Y-%m-%d")
@@ -253,18 +253,18 @@ class Cache:
                     expired = time_between_insertion.days > self.expiration
         return id_to_return, imdb_id, media_type, expired
 
-    def update_guid_map(self, plex_guid, t_id, imdb_id, expired, media_type):
+    def update_guid_map(self, emby_guid, t_id, imdb_id, expired, media_type):
         expiration_date = datetime.now() if expired is True else (datetime.now() - timedelta(days=random.randint(1, self.expiration)))
         with sqlite3.connect(self.cache_path) as connection:
             connection.row_factory = sqlite3.Row
             with closing(connection.cursor()) as cursor:
-                cursor.execute(f"INSERT OR IGNORE INTO guids_map(plex_guid) VALUES(?)", (plex_guid,))
+                cursor.execute(f"INSERT OR IGNORE INTO guids_map(emby_guid) VALUES(?)", (emby_guid,))
                 if media_type is None:
-                    sql = f"UPDATE guids_map SET t_id = ?, imdb_id = ?, expiration_date = ? WHERE plex_guid = ?"
-                    cursor.execute(sql, (t_id, imdb_id, expiration_date.strftime("%Y-%m-%d"), plex_guid))
+                    sql = f"UPDATE guids_map SET t_id = ?, imdb_id = ?, expiration_date = ? WHERE emby_guid = ?"
+                    cursor.execute(sql, (t_id, imdb_id, expiration_date.strftime("%Y-%m-%d"), emby_guid))
                 else:
-                    sql = f"UPDATE guids_map SET t_id = ?, imdb_id = ?, expiration_date = ?, media_type = ? WHERE plex_guid = ?"
-                    cursor.execute(sql, (t_id, imdb_id, expiration_date.strftime("%Y-%m-%d"), media_type, plex_guid))
+                    sql = f"UPDATE guids_map SET t_id = ?, imdb_id = ?, expiration_date = ?, media_type = ? WHERE emby_guid = ?"
+                    cursor.execute(sql, (t_id, imdb_id, expiration_date.strftime("%Y-%m-%d"), media_type, emby_guid))
 
     def query_imdb_to_tmdb_map(self, _id, imdb=True, media_type=None, return_type=False):
         from_id = "imdb_id" if imdb else "tmdb_id"
