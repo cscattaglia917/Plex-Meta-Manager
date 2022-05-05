@@ -1869,27 +1869,54 @@ class CollectionBuilder:
         logger.separator(f"Adding to {self.name} {self.Type}", space=False, border=False)
         logger.info("")
 
+        #Start with Middle Earth instead. Seems to be an issue with a movie being in multiple collections?
+        #First test -comment out the big genres in the lists.yml file
+        if self.name == 'Batman' or self.name == 'Wizarding World':
+            print("Batman")
         name, collection_items, collection_id = self.library.get_collection_name_and_items(self.obj.name if self.obj else self.name, self.smart_label_collection)
         total = self.limit if self.limit and len(self.added_items) > self.limit else len(self.added_items)
         spacing = len(str(total)) * 2 + 1
         amount_added = 0
         amount_unchanged = 0
         playlist_adds = []
+        #If not collection_id = means that no collection_id was returned - AKA - collection does not exist.
+        #If collection doesn't exist, no need to go through the below logic - just create the collection with the specified movies, etc.
+
+        
+        items_to_add = []
         for i, item in enumerate(self.added_items, 1):
             if self.limit and amount_added + self.beginning_count - len([r for _, r in self.remove_item_map.items() if r is not None]) >= self.limit:
                 logger.info(f"{self.Type} Limit reached")
                 self.added_items = self.added_items[:i-1]
                 break
+            if not collection_items and not collection_id:
+                #Collection does not exist - so we will create a collection with all items in it and break the loop
+                #items_to_add is instantly set to self.add_items and items_to_add is passed through to create_collection.
+                #Make sure to modify create_collection to accept lists and check the type upon passage.
+                #If list - iterate through and create a string list of IDs to pass through to the API.
+                #If single item - just pass the one ID to the API.  (Will probably never actually be a single item collection....)
+                self.library.create_collection(item, name)
+                name, collection_items, collection_id = self.library.get_collection_name_and_items(self.obj.name if self.obj else self.name, self.smart_label_collection)
+                if collection_items and collection_id:
+                    current_operation = "+"
+                    number_text = f"{i}/{total}"
+                    logger.info(f"{number_text:>{spacing}} | {name} {self.Type} | {current_operation} | {item.name}")
+                    amount_added += 1
+                    continue
+                else: 
+                    raise Failed("Emby Error - Unable to create collection")
             current_operation = "=" if item in collection_items else "+"
             number_text = f"{i}/{total}"
             logger.info(f"{number_text:>{spacing}} | {name} {self.Type} | {current_operation} | {item.name}")
             if item in collection_items:
                 self.remove_item_map[item.id] = None
                 amount_unchanged += 1
+                #continue back up to the top of the loop - only alter the collection once we have all the items that need to be added.
             else:
                 if self.playlist:
                     playlist_adds.append(item)
                 else:
+                    #Only alter_collection once we have built a list of IDs to pass through to the collection.
                     self.library.alter_collection(item, collection_id, smart_label_collection=self.smart_label_collection)
                 amount_added += 1
                 if self.details["changes_webhooks"]:
@@ -2424,8 +2451,10 @@ class CollectionBuilder:
                 self.obj.overview = summary
                 batch_display += f"\nSummary | {summary:<25}"
 
-            if "sort_title" in self.details and str(self.details["sort_title"]) != str(self.obj.sort_name):
+            if "sort_title" in self.details:
+            #if "sort_title" in self.details and str(self.details["sort_title"]) != str(self.obj.sort_name):
                 self.obj.forced_sort_name = self.details["sort_title"]
+                self.obj.sort_name = self.details["sort_title"]
                 batch_display += f"\nSort Title | {self.details['sort_title']}"
 
             if "collection_order" in self.details:
@@ -2450,6 +2479,7 @@ class CollectionBuilder:
             if len(batch_display) > 25:
                 try:
                     self.library.update_item(self.obj, self.obj.id)
+                    self.fetch_item()
                     logger.info("Details: have been updated")
                 except NotFound:
                     logger.error("Details: Failed to Update Please delete the collection and run again")
@@ -2499,7 +2529,14 @@ class CollectionBuilder:
             logger.debug(f"{len(self.posters)} posters found:")
             for p in self.posters:
                 #Changed debug so that b64 string wouldn't print
-                logger.debug(f"Method: {p} Poster: attribute - {self.posters[p].attribute}  compare - {self.posters[p].compare}  is_poster - {self.posters[p].is_poster} is_url - {self.posters[p].is_url} location - {self.posters[p].location} message - {self.posters[p].message} prefix - {self.posters[p].prefix}")
+                logger.debug(f"Method: {p} Poster: {self.posters[p]}")
+                # logger.debug(f"Method: {p} Poster: {{'attribute': '{self.posters[p].attribute}', " \
+                #     f"'compare': '{self.posters[p].compare}', " \
+                #     f"'is_poster': '{self.posters[p].is_poster}', " \
+                #     f"'is_url': '{self.posters[p].is_url}', " \
+                #     f"'location': '{self.posters[p].location}', " \
+                #     f"'message': '{self.posters[p].message}' " \
+                #     f"'prefix': '{self.posters[p].prefix}'}}")
             
             if "url_poster" in self.posters:
                 if self.library.download_url_assets and asset_location:
@@ -2553,7 +2590,7 @@ class CollectionBuilder:
                             new_image = os.path.join(asset_location, f"background{'.png' if response.headers['Content-Type'] == 'image/png' else '.jpg'}")
                             with open(new_image, "wb") as handler:
                                 handler.write(response.content)
-                            self.collection_background = ImageData("asset_directory", new_image, prefix=f"{self.obj.title}'s ", is_url=False, is_poster=False)
+                            self.collection_background = ImageData("asset_directory", new_image, prefix=f"{self.obj.name}'s ", is_url=False, is_poster=False)
                 if not self.collection_background:
                     self.collection_background = ImageData("url_background", self.backgrounds["url_background"], is_poster=False)
             elif "file_background" in self.backgrounds:         self.collection_background = ImageData("file_background", self.backgrounds["file_background"], is_poster=False, is_url=False)

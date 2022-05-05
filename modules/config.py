@@ -570,8 +570,14 @@ class ConfigFile:
             self.general["emby"] = {
                 "url": check_for_attribute(self.data, "url", parent="emby", var_type="url", default_is_none=True),
                 "api_key": check_for_attribute(self.data, "api_key", parent="emby", default_is_none=True),
-                "user_name": check_for_attribute(self.data, "user_name", parent="emby", default_is_none=True)
+                "user_name": check_for_attribute(self.data, "user_name", parent="emby", default_is_none=True),
+                "password": check_for_attribute(self.data, "password", parent="emby", default_is_none=True)
             }
+            # emby_password = check_for_attribute(self.data, "password", parent="emby", default_is_none=True)
+            #  region = check_for_attribute(self.data, "region", parent="tmdb", test_list=self.TMDb.iso_3166_1, default_is_none=True)
+            #     self.TMDb.region = str(region).upper() if region else region
+            # if emby_password != None:
+            #     self.general.
             # self.general["plex"] = {
             #     "url": check_for_attribute(self.data, "url", parent="plex", var_type="url", default_is_none=True),
             #     "token": check_for_attribute(self.data, "token", parent="plex", default_is_none=True),
@@ -879,7 +885,8 @@ class ConfigFile:
                     params["emby"] = {
                         "url": check_for_attribute(lib, "url", parent="emby", var_type="url", default=self.general["emby"]["url"], req_default=True, save=False),
                         "api_key": check_for_attribute(lib, "api_key", parent="emby", default=self.general["emby"]["api_key"], req_default=True, save=False),
-                        "user_name": check_for_attribute(lib, "user_name", parent="emby", default=self.general["emby"]["user_name"], req_default=True, save=False)
+                        "user_name": check_for_attribute(lib, "user_name", parent="emby", default=self.general["emby"]["user_name"], req_default=True, save=False),
+                        "password": check_for_attribute(lib, "password", parent="emby", default=self.general["emby"]["password"], req_default=True, save=False)
                     }
                     # params["plex"] = {
                     #     "url": check_for_attribute(lib, "url", parent="plex", var_type="url", default=self.general["plex"]["url"], req_default=True, save=False),
@@ -915,7 +922,8 @@ class ConfigFile:
                     params["emby"] = {
                         "url": check_for_attribute(lib, "url", parent="emby", var_type="url", default=self.general["emby"]["url"], req_default=True, save=False),
                         "api_key": check_for_attribute(lib, "api_key", parent="emby", default=self.general["emby"]["api_key"], req_default=True, save=False),
-                        "user_name": check_for_attribute(lib, "user_name", parent="emby", default=self.general["emby"]["user_name"], req_default=True, save=False)
+                        "user_name": check_for_attribute(lib, "user_name", parent="emby", default=self.general["emby"]["user_name"], req_default=True, save=False),
+                        "password": check_for_attribute(lib, "password", parent="emby", default=self.general["emby"]["password"], req_default=True, save=False)
                     }
                     embyLibrary = Emby(self, params)
                 if self.general["radarr"]["url"] or (lib and "radarr" in lib):

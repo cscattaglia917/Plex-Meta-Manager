@@ -37,9 +37,6 @@ class ImageData:
         self.compare = location if is_url else os.stat(location).st_size
         self.message = f"{prefix}{'poster' if is_poster else 'background'} to [{'URL' if is_url else 'File'}] {location}"
 
-        if not is_url:
-            with open(location, "rb") as image:
-                self.b64 = base64.b64encode(image.read())
 
     def __str__(self):
         return str(self.__dict__)

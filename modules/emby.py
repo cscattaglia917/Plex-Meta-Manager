@@ -1,3 +1,4 @@
+import base64
 import os, plexapi, requests, embyapi
 from datetime import datetime
 from embyapi import ApiClient
@@ -385,6 +386,9 @@ sort_types = {
     "tracks": (10, track_sorts)
 }
 
+LOG_DIR = "logs"
+DEBUG_LOG = "debug.log"
+
 class Emby(Library):
     def __init__(self, config, params):
         super().__init__(config, params)
@@ -392,7 +396,13 @@ class Emby(Library):
         self.configuration.host = params["emby"]["url"]
         self.configuration.api_key['api_key'] = params["emby"]["api_key"]
         self.configuration.user_name = params["emby"]["user_name"]
-        #self.configuration.debug = True
+        self.configuration.password = None
+        self.configuration.access_token = None
+        if params["emby"]["password"] != None:
+            self.configuration.password = params["emby"]["password"]
+        self.configuration.debug = True
+        self.log_dir = os.path.join('/workspace/config', LOG_DIR)
+        self.configuration.logger_file = os.path.join(self.log_dir, DEBUG_LOG)
         logger.secret(self.configuration.host)
         logger.secret(self.configuration.api_key['api_key'])
         try:
@@ -427,6 +437,28 @@ class Emby(Library):
             if user.name == self.configuration.user_name: 
                 self.user_id = user.id
         
+        if self.configuration.password:
+            self.adminConfiguration = embyapi.Configuration()
+            body = {
+                 "Username": f"{self.configuration.user_name}",
+                 "Pw": f"{self.configuration.password}"
+            }
+            x_emby_authorization = f"Emby UserId={self.user_id},Client=Emby-Meta-Manager,Device=Swagger-Codegen,DeviceId=123456,Version=1.1.0"
+            userAuth = embyapi.UserServiceApi(self.EmbyServer).post_users_authenticatebyname(body, x_emby_authorization)
+            self.adminConfiguration.access_token = userAuth.access_token
+
+            self.adminConfiguration.host = params["emby"]["url"]
+            self.adminConfiguration.api_key['api_key'] = self.adminConfiguration.access_token
+            try:
+                self.EmbyAdminServer = ApiClient(self.adminConfiguration)
+            except Unauthorized:
+                raise Failed("Emby Error: Emby API Key is invalid")
+            except ValueError as e:
+                raise Failed(f"Emby Error: {e}")
+            except (requests.exceptions.ConnectionError, ParseError):
+                logger.stacktrace()
+                raise Failed("Emby Error: Emby url is invalid")
+
         self._users = users
         #self._users = []
         self._all_items = []
@@ -440,8 +472,8 @@ class Emby(Library):
         #if not self.is_music and self.update_blank_track_titles:
         #    self.update_blank_track_titles = False
         #    logger.error(f"update_blank_track_titles library operation only works with music libraries")
-        #self.fields = 'ChannelMappingInfo'
-        self.fields = 'Budget,Chapters,ChildCount,DateCreated,DisplayOrder,ExternalUrls,Genres,HomePageUrl,IndexOptions,MediaStreams,OfficialRating,Overview,ParentId,Path,People,ProviderIds,PrimaryImageAspectRatio,Revenue,SortName,Studios,Taglines'
+        #self.fields = 'ChannelMappingInfo' ,ForcedSortName,
+        self.fields = 'Budget,CanDelete,Chapters,ChildCount,DateCreated,DisplayOrder,ExternalUrls,ForcedSortName,Genres,HomePageUrl,IndexOptions,MediaStreams,OfficialRating,Overview,ParentId,Path,People,ProviderIds,PrimaryImageAspectRatio,Revenue,SortName,Studios,Taglines'
 
         if self.tmdb_collections and self.is_show:
             self.tmdb_collections = None
@@ -500,8 +532,17 @@ class Emby(Library):
             recursive=True, fields=fields, ids=data)
         return results
 
-    def update_item(self, body, data):
-        embyapi.ItemUpdateServiceApi(self.EmbyServer).post_items_by_itemid(body, data)
+    def update_item(self, body, id):
+        itemResults = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(self.user_id, id)
+        #Insert body data into pulledItem IF THE VALUE IS NOT NULL!!! THEN post "pulledItem" to the API
+        itemDict = itemResults.to_dict()
+        bodyDict = body.to_dict()
+        itemDict.update( (k,v) for k,v in bodyDict.items() if v is not None)
+        newItem = embyapi.BaseItemDto()
+        for item in itemDict:
+            if itemDict[item] is not None:
+                setattr(newItem, item, itemDict[item])
+        embyapi.ItemUpdateServiceApi(self.EmbyServer).post_items_by_itemid(newItem, id)
 
     def get_all(self, collection_level=None, load=False):
         results = []
@@ -575,11 +616,13 @@ class Emby(Library):
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
     def reload(self, item):
         try:
-            item.reload(checkFiles=False, includeAllConcerts=False, includeBandwidths=False, includeChapters=False,
-                        includeChildren=False, includeConcerts=False, includeExternalMedia=False, includeExtras=False,
-                        includeFields=False, includeGeolocation=False, includeLoudnessRamps=False, includeMarkers=False,
-                        includeOnDeck=False, includePopularLeaves=False, includeRelated=False,
-                        includeRelatedCount=0, includeReviews=False, includeStations=False)
+            results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id, ids=item.id, fields=self.fields)
+            return results.items[0]
+            # item.reload(checkFiles=False, includeAllConcerts=False, includeBandwidths=False, includeChapters=False,
+            #             includeChildren=False, includeConcerts=False, includeExternalMedia=False, includeExtras=False,
+            #             includeFields=False, includeGeolocation=False, includeLoudnessRamps=False, includeMarkers=False,
+            #             includeOnDeck=False, includePopularLeaves=False, includeRelated=False,
+            #             includeRelatedCount=0, includeReviews=False, includeStations=False)
         except (BadRequest, NotFound) as e:
             logger.stacktrace()
             raise Failed(f"Item Failed to Load: {e}")
@@ -601,9 +644,9 @@ class Emby(Library):
                 #item.uploadPoster(url=image.location)
             elif image.is_poster:
                 type_ = 'Primary'
-                b64string = str(image.b64).strip("b'").rstrip("'")
+                with open(image.location, "rb") as image_:
+                    b64string = str(base64.b64encode(image_.read())).strip("b'").rstrip("'")
                 embyapi.ImageServiceApi(self.EmbyServer).post_items_by_id_images_by_type(b64string, item.id, type_)
-                #embyapi.ImageServiceApi(self.EmbyServer).post_items_by_id_images_by_type(image.b64, item.id, type_)
             elif image.is_url:
                 item.uploadArt(url=image.location)
             else:
@@ -661,8 +704,15 @@ class Emby(Library):
             self._users = users
         return self._users
 
+    def create_collection(self, item, collection):
+        embyapi.CollectionServiceApi(self.EmbyServer).post_collections(name=collection, ids=item.id)
+
+    def delete_collection(self, collection):
+        embyapi.LibraryServiceApi(self.EmbyAdminServer).delete_items_by_id(collection.id)
+
     def alter_collection(self, item, collection, smart_label_collection=False, add=True):
         #TODO: Wrap in try/catch/except
+        #print("alter_collection()")
         embyapi.CollectionServiceApi(self.EmbyServer).post_collections_by_id_items(id=collection, ids=item.id)
 
     def move_item(self, collection, item, after=None):
@@ -817,7 +867,6 @@ class Emby(Library):
 
     def get_collection(self, data):
         if isinstance(data, int):
-        #if isinstance(data, (int, str)):
             return self.fetchItem(data)
         elif isinstance(data, Collection):
             return data
@@ -837,10 +886,12 @@ class Emby(Library):
         if collection:
             collections = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
                 recursive=True, fields=fields, search_term=collection, include_item_types='boxset')
-            collection_id = collections.items[0].id
-            results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                recursive=True, fields=fields, parent_id=collection_id)
-            return results.items
+            for c in collections.items:
+                if c.name == collection:
+                    collection_id = c.id
+                    results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+                        recursive=True, fields=fields, parent_id=collection_id)
+                    return results.items
         else:
             return []
 
@@ -854,8 +905,10 @@ class Emby(Library):
         if collection:
             collections = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
                 recursive=True, fields=fields, search_term=collection, include_item_types='boxset')
-            collection_id = collections.items[0].id
-            return collection_id
+            for c in collections.items:
+                if c.name == collection:
+                    collection_id = c.id
+                    return collection_id
         else:
             raise Failed("Emby Error: Unable to find Collection ID")
 

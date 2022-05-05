@@ -237,18 +237,15 @@ def update_emby_libraries(config):
             logger.debug(f"Show Missing: {library.show_missing}")
             logger.debug(f"Show Missing Assets: {library.show_missing_assets}")
             logger.debug(f"Save Missing: {library.save_missing}")
-            #logger.debug(f"Clean Bundles: {library.clean_bundles}")
-            #logger.debug(f"Empty Trash: {library.empty_trash}")
-            #logger.debug(f"Optimize: {library.optimize}")
-            #logger.debug(f"Timeout: {library.timeout}")
 
             if config.delete_collections:
                 logger.info("")
+                #TODO: Enforce mandatory emby[password] if delete collections is set
                 logger.separator(f"Deleting all Collections from the {library.name} Library", space=False, border=False)
                 logger.info("")
                 for collection in library.get_all_collections():
-                    logger.info(f"Collection {collection.title} Deleted")
-                    library.query(collection.delete)
+                    logger.info(f"Collection {collection.name} Deleted")
+                    library.delete_collection(collection)
             if not library.is_other and not library.is_music and (library.metadata_files or library.original_mapping_name in config.library_map) and not library_only:
                 logger.info("")
                 logger.separator(f"Mapping {library.name} Library", space=False, border=False)
@@ -519,8 +516,8 @@ def update_libraries(config):
                 logger.separator(f"Deleting all Collections from the {library.name} Library", space=False, border=False)
                 logger.info("")
                 for collection in library.get_all_collections():
-                    logger.info(f"Collection {collection.title} Deleted")
-                    library.query(collection.delete)
+                    logger.info(f"Collection {collection.name} Deleted")
+                    library.delete_collection(collection)
             if not library.is_other and not library.is_music and (library.metadata_files or library.original_mapping_name in config.library_map) and not library_only:
                 logger.info("")
                 logger.separator(f"Mapping {library.name} Library", space=False, border=False)

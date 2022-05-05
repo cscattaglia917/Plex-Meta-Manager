@@ -216,6 +216,9 @@ class Library(ABC):
 
         if self.config.Cache:
             if poster_uploaded:
+                #Is an item refresh required here? Sometimes image_tags is null at item.image_tags - but if I pull the item via Swagger, it is fine.
+                if not 'Primary' in item.image_tags:
+                    item = self.reload(item)
                 self.config.Cache.update_image_map(item.id, self.image_table_name, item.image_tags['Primary'], poster.compare if poster else "")
             if background_uploaded:
                 self.config.Cache.update_image_map(item.ratingKey, f"{self.image_table_name}_backgrounds", item.art, background.compare)
