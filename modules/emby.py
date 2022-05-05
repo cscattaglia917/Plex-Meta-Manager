@@ -499,13 +499,10 @@ class Emby(Library):
     def search(self, title=None, libtype=None, sort=None, maxresults=None, **kwargs):
         results = []
         if libtype == 'collection':
-            fields = self.fields
+            #fields = self.fields
             if title:
                 results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, fields=fields, search_term=title, include_item_types='boxset')
-            else:
-                results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, fields=fields, include_item_types='boxset')
+                    recursive=True, search_term=title, include_item_types='boxset')
         else:
             fields = 'Overview,ProviderIds'
         return results
@@ -526,10 +523,8 @@ class Emby(Library):
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
     def fetchItem(self, data):
         results = []
-        #fields = 'ChannelMappingInfo'
-        fields = self.fields
-        results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-            recursive=True, fields=fields, ids=data)
+        results = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(user_id=self.user_id,
+            id=data)
         return results
 
     def update_item(self, body, id):
@@ -881,23 +876,25 @@ class Emby(Library):
             logger.debug(f"Looking for: {data}")
         raise Failed(f"Plex Error: Collection {data} not found")
 
-    def get_collection_items(self, collection, smart_label_collection):
-        fields = self.fields
+    def get_collection_id_and_items(self, collection, smart_label_collection):
         if collection:
             collections = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                recursive=True, fields=fields, search_term=collection, include_item_types='boxset')
+                recursive=True, search_term=collection, include_item_types='boxset')
             for c in collections.items:
                 if c.name == collection:
                     collection_id = c.id
                     results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                        recursive=True, fields=fields, parent_id=collection_id)
-                    return results.items
+                        parent_id=collection_id)
+                    return collection_id, results.items
+            else:
+                return None, []
         else:
-            return []
+            return None, []
 
     def get_collection_name_and_items(self, collection, smart_label_collection):
         name = collection.title if isinstance(collection, (Collection, Playlist)) else str(collection)
-        return name, self.get_collection_items(collection, smart_label_collection), self.get_collection_id(collection)
+        collection_id, collection_items = self.get_collection_id_and_items(collection, smart_label_collection)
+        return name, collection_id, collection_items
 
     def get_collection_id(self, collection):
         fields = self.fields

@@ -1544,9 +1544,6 @@ class CollectionBuilder:
             logger.info("")
             logger.info("Filtering Builders:")
         for i, item in enumerate(items, 1):
-            #print(type(item.items))
-            #print(item.items[0].type)
-            item = item.items[0]
             itemType = item.type
             if not itemType in ["Movie", "Series", "Season", "Episode", "MusicArtist", "MusicAlbum", "Audio"]:
                 logger.error(f"{self.Type} Error: Item: {item} is an invalid type")
@@ -1854,10 +1851,8 @@ class CollectionBuilder:
 
     def fetch_item(self, item):
         try:
-            #print("DEBUG :: ", item.ratingKey)
             current = self.library.fetchItem(item)
-            #current = self.library.fetchItem(item.ratingKey if isinstance(item, (Movie, Show, Season, Episode, Artist, Album, Track)) else int(item))
-            itemType = current.items[0].type
+            itemType = current.type
             if not itemType in ["Movie", "Series", "Season", "Episode", "MusicArtist", "MusicAlbum", "Audio"]:
                 raise NotFound
             return current
@@ -1873,7 +1868,7 @@ class CollectionBuilder:
         #First test -comment out the big genres in the lists.yml file
         if self.name == 'Batman' or self.name == 'Wizarding World':
             print("Batman")
-        name, collection_items, collection_id = self.library.get_collection_name_and_items(self.obj.name if self.obj else self.name, self.smart_label_collection)
+        name, collection_id, collection_items = self.library.get_collection_name_and_items(self.obj.name if self.obj else self.name, self.smart_label_collection)
         total = self.limit if self.limit and len(self.added_items) > self.limit else len(self.added_items)
         spacing = len(str(total)) * 2 + 1
         amount_added = 0
