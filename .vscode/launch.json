@@ -6,18 +6,58 @@
     "configurations": [
 
         {
-            "name": "Python: Current File",
+            "name": "PMM --delete",
             "type": "python",
             "request": "launch",
             "program": "plex_meta_manager.py",
             "args": [
-                "-r", 
                 "--debug",
-                "--collections-only",
-                "--run-collections", "Captain America"
+                "--delete-collections",
+                "-r",
+                //"-re", "Disaster"
+                //"--collections-only",
+                //"--run-collections", "Anime"
             ],
             "console": "integratedTerminal",
             "justMyCode": false
-        }
+        },
+        {
+            "name": "PMM -r",
+            "type": "python",
+            "request": "launch",
+            "program": "plex_meta_manager.py",
+            "args": [
+                "--debug",
+                "-r"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "PMM -rc",
+            "type": "python",
+            "request": "launch",
+            "program": "plex_meta_manager.py",
+            "args": [
+                "--debug",
+                "-r",
+                "--run-collections", "28 Days/Weeks Later"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "PMM --libraries-first",
+            "type": "python",
+            "request": "launch",
+            "program": "plex_meta_manager.py",
+            "args": [
+                "--debug",
+                "-r",
+                "-lf" //libraries first
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
     ]
 }

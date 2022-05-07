@@ -25,8 +25,8 @@ class Library(ABC):
         self.imdb_map = {}
         self.anidb_map = {}
         self.mal_map = {}
-        self.movie_id_map = {}
-        self.show_id_map = {}
+        self.movie_rating_key_map = {}
+        self.show_rating_key_map = {}
         self.run_again = []
         self.overlays = []
         self.type = ""
@@ -262,21 +262,19 @@ class Library(ABC):
             logger.error(f"YAML Error: {util.tab_new_lines(e)}")
 
     def map_guids(self):
-        items = self.get_all()
-        #Append GUID to each item inside below loop? In teh format of?
-        #guid == scheme='plex', netloc='movie', path='/5d776c65594b2b001e6f29c0'
+        items = self.get_all(mapping=True)
         logger.info(f"Mapping {self.type} Library: {self.name}")
         logger.info("")
         for i, item in enumerate(items.items, 1):
             logger.ghost(f"Processing: {i}/{len(items.items)} {item.name}")
-            if item.id not in self.movie_id_map and item.id not in self.show_id_map:
+            if item.id not in self.movie_rating_key_map and item.id not in self.show_rating_key_map:
                 id_type, main_id, imdb_id = self.config.Convert.get_id(item, self)
                 if main_id:
                     if id_type == "movie":
-                        self.movie_id_map[item.id] = main_id[0]
+                        self.movie_rating_key_map[item.id] = main_id[0]
                         util.add_dict_list(main_id, int(item.id), self.movie_map)
                     elif id_type == "show":
-                        self.show_id_map[item.id] = main_id[0]
+                        self.show_rating_key_map[item.id] = main_id[0]
                         util.add_dict_list(main_id, int(item.id), self.show_map)
                 if imdb_id:
                     util.add_dict_list(imdb_id, item.id, self.imdb_map)

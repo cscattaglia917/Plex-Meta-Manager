@@ -9,4 +9,3 @@ retrying==1.3.3
 pathvalidate==2.5.0
 pillow==9.0.1
 EmbyServerAPI==1.1.0
-debugpy

@@ -723,7 +723,10 @@ class CollectionBuilder:
                 if not self.playlist:
                     self.beginning_count = self.obj.child_count
                 if self.sync or self.playlist:
-                    self.remove_item_map = {i.id: i for i in self.library.get_collection_items(self.obj.name, self.smart_label_collection)}
+                    #TODO Right now this only works with Emby I think.
+                    #If you library is a "plex" library object, it won't have get_collection_id_and_items.
+                    collection_id, collection_items = self.library.get_collection_id_and_items(self.obj.name, self.smart_label_collection)
+                    self.remove_item_map = {i.id: i for i in collection_items}
                     if self.playlist:
                         self.beginning_count = len(self.remove_item_map)
         else:
@@ -1853,7 +1856,7 @@ class CollectionBuilder:
         try:
             current = self.library.fetchItem(item)
             itemType = current.type
-            if not itemType in ["Movie", "Series", "Season", "Episode", "MusicArtist", "MusicAlbum", "Audio"]:
+            if not itemType in ["Movie", "Series", "Season", "Episode", "MusicArtist", "MusicAlbum", "Audio", "BoxSet"]:
                 raise NotFound
             return current
         except (BadRequest, NotFound):
@@ -1864,10 +1867,6 @@ class CollectionBuilder:
         logger.separator(f"Adding to {self.name} {self.Type}", space=False, border=False)
         logger.info("")
 
-        #Start with Middle Earth instead. Seems to be an issue with a movie being in multiple collections?
-        #First test -comment out the big genres in the lists.yml file
-        if self.name == 'Batman' or self.name == 'Wizarding World':
-            print("Batman")
         name, collection_id, collection_items = self.library.get_collection_name_and_items(self.obj.name if self.obj else self.name, self.smart_label_collection)
         total = self.limit if self.limit and len(self.added_items) > self.limit else len(self.added_items)
         spacing = len(str(total)) * 2 + 1
@@ -1875,35 +1874,37 @@ class CollectionBuilder:
         amount_unchanged = 0
         playlist_adds = []
         #If not collection_id = means that no collection_id was returned - AKA - collection does not exist.
-        #If collection doesn't exist, no need to go through the below logic - just create the collection with the specified movies, etc.
-
-        
+        #If collection doesn't exist - just create the collection with all specified IDs and return out of function.
         items_to_add = []
+        if not collection_items and not collection_id:
+            for i, item in enumerate(self.added_items, 1):
+                if self.limit and amount_added + self.beginning_count - len([r for _, r in self.remove_item_map.items() if r is not None]) >= self.limit:
+                    logger.info(f"{self.Type} Limit reached")
+                    self.added_items = self.added_items[:i-1]
+                    break
+                current_operation = "+"
+                number_text = f"{i}/{total}"
+                logger.info(f"{number_text:>{spacing}} | {name} {self.Type} | {current_operation} | {item.name}")
+                amount_added += 1
+                continue
+            self.library.create_collection(self.name, self.added_items)
+            #time.sleep(2)
+            logger.exorcise()
+            logger.info("")
+            logger.info(f"{total} {self.collection_level.capitalize()}{'s' if total > 1 else ''} Processed")
+            return amount_added, amount_unchanged
+
+        #If we make it here, that means the collection already existed and we need to add to it.
         for i, item in enumerate(self.added_items, 1):
             if self.limit and amount_added + self.beginning_count - len([r for _, r in self.remove_item_map.items() if r is not None]) >= self.limit:
                 logger.info(f"{self.Type} Limit reached")
                 self.added_items = self.added_items[:i-1]
                 break
-            if not collection_items and not collection_id:
-                #Collection does not exist - so we will create a collection with all items in it and break the loop
-                #items_to_add is instantly set to self.add_items and items_to_add is passed through to create_collection.
-                #Make sure to modify create_collection to accept lists and check the type upon passage.
-                #If list - iterate through and create a string list of IDs to pass through to the API.
-                #If single item - just pass the one ID to the API.  (Will probably never actually be a single item collection....)
-                self.library.create_collection(item, name)
-                name, collection_items, collection_id = self.library.get_collection_name_and_items(self.obj.name if self.obj else self.name, self.smart_label_collection)
-                if collection_items and collection_id:
-                    current_operation = "+"
-                    number_text = f"{i}/{total}"
-                    logger.info(f"{number_text:>{spacing}} | {name} {self.Type} | {current_operation} | {item.name}")
-                    amount_added += 1
-                    continue
-                else: 
-                    raise Failed("Emby Error - Unable to create collection")
-            current_operation = "=" if item in collection_items else "+"
+            current_operation = "=" if (any(x.id == item.id for x in collection_items)) else "+"
+            #current_operation = "=" if item.id in collection_items else "+"
             number_text = f"{i}/{total}"
             logger.info(f"{number_text:>{spacing}} | {name} {self.Type} | {current_operation} | {item.name}")
-            if item in collection_items:
+            if current_operation == "=":
                 self.remove_item_map[item.id] = None
                 amount_unchanged += 1
                 #continue back up to the top of the loop - only alter the collection once we have all the items that need to be added.
@@ -1911,8 +1912,9 @@ class CollectionBuilder:
                 if self.playlist:
                     playlist_adds.append(item)
                 else:
+                    items_to_add.append(item)
                     #Only alter_collection once we have built a list of IDs to pass through to the collection.
-                    self.library.alter_collection(item, collection_id, smart_label_collection=self.smart_label_collection)
+                    #self.library.alter_collection(item, collection_id, smart_label_collection=self.smart_label_collection)
                 amount_added += 1
                 if self.details["changes_webhooks"]:
                     if item.ratingKey in self.library.movie_rating_key_map:
@@ -1922,6 +1924,8 @@ class CollectionBuilder:
                     else:
                         add_id = None
                     self.notification_additions.append(util.item_set(item, add_id))
+        if items_to_add is not None and not self.playlist:
+            self.library.alter_collection(collection_id, items_to_add)
         if self.playlist and playlist_adds and not self.obj:
             self.obj = self.library.create_playlist(self.name, playlist_adds)
             logger.info("")
@@ -2474,7 +2478,8 @@ class CollectionBuilder:
             if len(batch_display) > 25:
                 try:
                     self.library.update_item(self.obj, self.obj.id)
-                    self.fetch_item()
+                    #time.sleep(2)
+                    self.fetch_item(self.obj.id) #fetch item right after to verify item has been updated.
                     logger.info("Details: have been updated")
                 except NotFound:
                     logger.error("Details: Failed to Update Please delete the collection and run again")
@@ -2523,15 +2528,7 @@ class CollectionBuilder:
         if len(self.posters) > 0:
             logger.debug(f"{len(self.posters)} posters found:")
             for p in self.posters:
-                #Changed debug so that b64 string wouldn't print
                 logger.debug(f"Method: {p} Poster: {self.posters[p]}")
-                # logger.debug(f"Method: {p} Poster: {{'attribute': '{self.posters[p].attribute}', " \
-                #     f"'compare': '{self.posters[p].compare}', " \
-                #     f"'is_poster': '{self.posters[p].is_poster}', " \
-                #     f"'is_url': '{self.posters[p].is_url}', " \
-                #     f"'location': '{self.posters[p].location}', " \
-                #     f"'message': '{self.posters[p].message}' " \
-                #     f"'prefix': '{self.posters[p].prefix}'}}")
             
             if "url_poster" in self.posters:
                 if self.library.download_url_assets and asset_location:

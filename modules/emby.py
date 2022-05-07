@@ -400,7 +400,7 @@ class Emby(Library):
         self.configuration.access_token = None
         if params["emby"]["password"] != None:
             self.configuration.password = params["emby"]["password"]
-        self.configuration.debug = True
+        #self.configuration.debug = True
         self.log_dir = os.path.join('/workspace/config', LOG_DIR)
         self.configuration.logger_file = os.path.join(self.log_dir, DEBUG_LOG)
         logger.secret(self.configuration.host)
@@ -460,9 +460,7 @@ class Emby(Library):
                 raise Failed("Emby Error: Emby url is invalid")
 
         self._users = users
-        #self._users = []
         self._all_items = []
-        #self.agent = self.Plex.agent
         self.is_movie = self.type == "Movies"
         self.is_show = self.type == "Series"
         self.is_music = self.type == "music"
@@ -472,7 +470,6 @@ class Emby(Library):
         #if not self.is_music and self.update_blank_track_titles:
         #    self.update_blank_track_titles = False
         #    logger.error(f"update_blank_track_titles library operation only works with music libraries")
-        #self.fields = 'ChannelMappingInfo' ,ForcedSortName,
         self.fields = 'Budget,CanDelete,Chapters,ChildCount,DateCreated,DisplayOrder,ExternalUrls,ForcedSortName,Genres,HomePageUrl,IndexOptions,MediaStreams,OfficialRating,Overview,ParentId,Path,People,ProviderIds,PrimaryImageAspectRatio,Revenue,SortName,Studios,Taglines'
 
         if self.tmdb_collections and self.is_show:
@@ -488,10 +485,10 @@ class Emby(Library):
         self.PlexServer.settings.save()
 
     def get_all_collections(self):
-        fields  = self.fields
+        #fields  = self.fields
         #fields = 'Overview,ProviderIds,ChildCount,Studios'
         collections = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, fields=fields, include_item_types='boxset')
+                    recursive=True, include_item_types='boxset')
         collections = collections.items
         return collections
 
@@ -499,12 +496,11 @@ class Emby(Library):
     def search(self, title=None, libtype=None, sort=None, maxresults=None, **kwargs):
         results = []
         if libtype == 'collection':
-            #fields = self.fields
             if title:
                 results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
                     recursive=True, search_term=title, include_item_types='boxset')
         else:
-            fields = 'Overview,ProviderIds'
+            print("How did we get here?")
         return results
 
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
@@ -529,7 +525,10 @@ class Emby(Library):
 
     def update_item(self, body, id):
         itemResults = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(self.user_id, id)
-        #Insert body data into pulledItem IF THE VALUE IS NOT NULL!!! THEN post "pulledItem" to the API
+        # Need to grab results for the specific item so that we include all current values in the POST request.
+        # Convert both itemResults and body to dicts, then update itemDict with values from bodyDict, if the value is not null.
+        # Build a new BaseItemDTO object and insert itemDict values into said object if values are not null.
+        # Post newItem object with all existing data + new data.
         itemDict = itemResults.to_dict()
         bodyDict = body.to_dict()
         itemDict.update( (k,v) for k,v in bodyDict.items() if v is not None)
@@ -539,7 +538,7 @@ class Emby(Library):
                 setattr(newItem, item, itemDict[item])
         embyapi.ItemUpdateServiceApi(self.EmbyServer).post_items_by_itemid(newItem, id)
 
-    def get_all(self, collection_level=None, load=False):
+    def get_all(self, collection_level=None, load=False, mapping=False):
         results = []
         if load and collection_level in [None, "show", "artist", "movie"]:
             self._all_items = []
@@ -554,9 +553,13 @@ class Emby(Library):
         for s in library_results.items:
             if s.name == self.name:
                 library_id = s.id
-        #fields = self.fields
-        #Only grab necessary fields when grabbing all items
-        fields = 'Overview,Path,ParentId,ProviderIds,Studios'
+        #Only grab necessary fields when grabbing all items to map_guids
+        if mapping:
+            fields = 'ProviderIds'
+        else:
+            fields = 'ProviderIds'
+            #fields = 'CriticRating,CustomRating,CommunityRating,Genres,\
+            #LockedFields,OfficialRating,ProviderIds,SortName,Studios'
         results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
                 parent_id=library_id, fields=fields)
         logger.info(f"Loaded {len(results.items)} {collection_level.capitalize()}")
@@ -611,13 +614,8 @@ class Emby(Library):
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
     def reload(self, item):
         try:
-            results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id, ids=item.id, fields=self.fields)
-            return results.items[0]
-            # item.reload(checkFiles=False, includeAllConcerts=False, includeBandwidths=False, includeChapters=False,
-            #             includeChildren=False, includeConcerts=False, includeExternalMedia=False, includeExtras=False,
-            #             includeFields=False, includeGeolocation=False, includeLoudnessRamps=False, includeMarkers=False,
-            #             includeOnDeck=False, includePopularLeaves=False, includeRelated=False,
-            #             includeRelatedCount=0, includeReviews=False, includeStations=False)
+            results = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(self.user_id, item.id)
+            return results
         except (BadRequest, NotFound) as e:
             logger.stacktrace()
             raise Failed(f"Item Failed to Load: {e}")
@@ -699,16 +697,27 @@ class Emby(Library):
             self._users = users
         return self._users
 
-    def create_collection(self, item, collection):
-        embyapi.CollectionServiceApi(self.EmbyServer).post_collections(name=collection, ids=item.id)
+    def create_collection(self, collection, item):
+        if isinstance(item, list):
+            id_string = ''
+            for i in item:
+                id_string += i.id + ','
+            embyapi.CollectionServiceApi(self.EmbyServer).post_collections(name=collection, ids=id_string)
+        if isinstance(item, int):
+            embyapi.CollectionServiceApi(self.EmbyServer).post_collections(name=collection, ids=item)
 
     def delete_collection(self, collection):
         embyapi.LibraryServiceApi(self.EmbyAdminServer).delete_items_by_id(collection.id)
 
-    def alter_collection(self, item, collection, smart_label_collection=False, add=True):
+    def alter_collection(self, collection_id, item, smart_label_collection=False, add=True):
         #TODO: Wrap in try/catch/except
-        #print("alter_collection()")
-        embyapi.CollectionServiceApi(self.EmbyServer).post_collections_by_id_items(id=collection, ids=item.id)
+        if isinstance(item, list):
+            id_string = ''
+            for i in item:
+                id_string += i.id + ','
+            embyapi.CollectionServiceApi(self.EmbyServer).post_collections_by_id_items(id=collection_id, ids=id_string)
+        if isinstance(item, int):
+            print("How did we get here?")
 
     def move_item(self, collection, item, after=None):
         key = f"{collection.key}/items/{item}/move"
@@ -869,7 +878,8 @@ class Emby(Library):
             cols = self.search(title=str(data), libtype="collection")
             for d in cols.items:
                 if d.name == data:
-                    return d
+                    return self.fetchItem(d.id) 
+                    #return d
             logger.debug("")
             for d in cols.items:
                 logger.debug(f"Found: {d.name}")
@@ -897,11 +907,11 @@ class Emby(Library):
         return name, collection_id, collection_items
 
     def get_collection_id(self, collection):
-        fields = self.fields
+        #fields = self.fields
         #fields = 'ProviderIds,SortName'
         if collection:
             collections = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                recursive=True, fields=fields, search_term=collection, include_item_types='boxset')
+                recursive=True, search_term=collection, include_item_types='boxset')
             for c in collections.items:
                 if c.name == collection:
                     collection_id = c.id
@@ -916,10 +926,10 @@ class Emby(Library):
         return self.Plex._search(key, None, 0, plexapi.X_PLEX_CONTAINER_SIZE)
 
     def get_tmdb_from_map(self, item):
-        return self.movie_rating_key_map[item.ratingKey] if item.ratingKey in self.movie_rating_key_map else None
+        return self.movie_rating_key_map[item.id] if item.id in self.movie_rating_key_map else None
 
     def get_tvdb_from_map(self, item):
-        return self.show_rating_key_map[item.ratingKey] if item.ratingKey in self.show_rating_key_map else None
+        return self.show_rating_key_map[item.id] if item.id in self.show_rating_key_map else None
 
     def search_item(self, data, year=None):
         kwargs = {}
@@ -978,9 +988,9 @@ class Emby(Library):
             path_test = str(item.path)
             if not os.path.dirname(path_test):
                 path_test = path_test.replace("\\", "/")
-            name = os.path.basename(os.path.dirname(path_test) if isinstance(item, Movie) else path_test)
+            name = os.path.basename(os.path.dirname(path_test) if itemType in ["Movie"] else path_test)
         elif itemType in ["BoxSet"]:
-            name = name if name else item.title
+            name = name if name else item.name
         else:
             return None, None, None
         if not folders:
@@ -1134,7 +1144,7 @@ class Emby(Library):
         tvdb_id = None
         imdb_id = None
         if self.config.Cache:
-            t_id, i_id, guid_media_type, _ = self.config.Cache.query_guid_map(item.guid)
+            t_id, i_id, guid_media_type, _ = self.config.Cache.query_guid_map(item.id)
             if t_id:
                 if "movie" in guid_media_type:
                     tmdb_id = t_id[0]
