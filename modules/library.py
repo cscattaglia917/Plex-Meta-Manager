@@ -221,7 +221,9 @@ class Library(ABC):
                     item = self.reload(item)
                 self.config.Cache.update_image_map(item.id, self.image_table_name, item.image_tags['Primary'], poster.compare if poster else "")
             if background_uploaded:
-                self.config.Cache.update_image_map(item.ratingKey, f"{self.image_table_name}_backgrounds", item.art, background.compare)
+                if not 'Backdrop' in item.image_tags:
+                    item = self.reload(item)
+                self.config.Cache.update_image_map(item.id, f"{self.image_table_name}_backgrounds", item.image_tags['Backdrop'], background.compare if background else "")
 
     @abstractmethod
     def notify(self, text, collection=None, critical=True):
