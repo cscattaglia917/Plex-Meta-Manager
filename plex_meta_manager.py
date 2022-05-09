@@ -479,12 +479,14 @@ def emby_library_operations(config, library):
                         raise Failed
                     #Unsure which field to fill..
                     # item.community_rating, item.custom_rating, item.userdata.rating
-                    if str(item.userRating) != str(new_rating):
-                        library.query_data(item.rate, new_rating)
-                        logger.info(f"{item.title[:25]:<25} | User Rating | {new_rating}")
+                    # Probably item.userdata.rating
+                    if str(item.user_data.rating) != str(new_rating):
+                        item.user_data.rating = new_rating
+                        logger.info(f"{item.name[:25]:<25} | User Rating | {new_rating}")
                 except Failed:
                     pass
-
+            
+            #TODO - these could potentially be added to Emby's tag feature.
             if library.mass_imdb_parental_labels:
                 try:
                     parental_guide = config.IMDb.parental_guide(imdb_id)
