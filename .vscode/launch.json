@@ -28,7 +28,8 @@
             "program": "plex_meta_manager.py",
             "args": [
                 "--debug",
-                "-r"
+                "-r",
+                "-l", "TV Shows"
             ],
             "console": "integratedTerminal",
             "justMyCode": false

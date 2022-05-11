@@ -463,11 +463,11 @@ def emby_library_operations(config, library):
             #TODO: No batch edit function for Emby API
             batch_display = "Batch Edits"
 
-            if library.remove_title_parentheses:
-                if not any([f.name == "title" and f.locked for f in item.fields]) and item.title.endswith(")"):
-                    new_title = re.sub(" \(\w+\)$", "", item.title)
-                    item.editTitle(new_title)
-                    batch_display += f"\n{item.title[:25]:<25} | Title | {new_title}"
+            if library.remove_title_parentheses: 
+                if "Name" not in item.locked_fields and item.name.endswith(")"):
+                    new_name = re.sub("\)", "", item.name)
+                    batch_display += f"\n{item.name[:25]:<25} | Title | {new_name}"
+                    item.name = new_name
 
             if library.mass_trakt_rating_update:
                 try:
@@ -477,12 +477,16 @@ def emby_library_operations(config, library):
                         new_rating = trakt_ratings[tvdb_id]
                     else:
                         raise Failed
-                    if str(item.userRating) != str(new_rating):
-                        library.query_data(item.rate, new_rating)
-                        logger.info(f"{item.title[:25]:<25} | User Rating | {new_rating}")
+                    #Unsure which field to fill..
+                    # item.community_rating, item.custom_rating, item.userdata.rating
+                    # Probably item.userdata.rating
+                    if str(item.user_data.rating) != str(new_rating):
+                        item.user_data.rating = new_rating
+                        logger.info(f"{item.name[:25]:<25} | User Rating | {new_rating}")
                 except Failed:
                     pass
-
+            
+            #TODO - these could potentially be added to Emby's tag feature.
             if library.mass_imdb_parental_labels:
                 try:
                     parental_guide = config.IMDb.parental_guide(imdb_id)

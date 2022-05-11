@@ -204,7 +204,7 @@ class Library(ABC):
                     image, image_compare = self.config.Cache.query_image_map(item.id, f"{self.image_table_name}_backgrounds")
                     if str(background.compare) != str(image_compare):
                         image = None
-                if image is None or image != item.art:
+                if image is None:
                     self._upload_image(item, background)
                     background_uploaded = True
                     logger.info(f"Detail: {background.attribute} updated {background.message}")
@@ -221,7 +221,9 @@ class Library(ABC):
                     item = self.reload(item)
                 self.config.Cache.update_image_map(item.id, self.image_table_name, item.image_tags['Primary'], poster.compare if poster else "")
             if background_uploaded:
-                self.config.Cache.update_image_map(item.ratingKey, f"{self.image_table_name}_backgrounds", item.art, background.compare)
+                if not 'Backdrop' in item.image_tags:
+                    item = self.reload(item)
+                self.config.Cache.update_image_map(item.id, f"{self.image_table_name}_backgrounds", item.backdrop_image_tags[0], background.compare if background else "")
 
     @abstractmethod
     def notify(self, text, collection=None, critical=True):

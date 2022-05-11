@@ -20,7 +20,7 @@ from xml.etree.ElementTree import ParseError
 
 logger = util.logger
 
-builders = ["plex_all", "plex_pilots", "plex_collectionless", "plex_search"]
+builders = ["emby_all", "emby_pilots", "plex_collectionless", "emby_search"]
 search_translation = {
     "episode_title": "episode.title",
     "network": "show.network",
@@ -462,7 +462,7 @@ class Emby(Library):
         self._users = users
         self._all_items = []
         self.is_movie = self.type == "Movies"
-        self.is_show = self.type == "Series"
+        self.is_show = self.type == "Tvshows"
         self.is_music = self.type == "music"
         self.is_other = self.type == "other"
         #if self.is_other and self.type == "Movie":
@@ -544,7 +544,7 @@ class Emby(Library):
             self._all_items = []
         if self._all_items and collection_level in [None, "show", "artist", "movie"]:
             return self._all_items
-        collection_type = collection_level if collection_level else self.Emby.type
+        collection_type = collection_level if collection_level else self.type
         if not collection_level:
             collection_level = self.type
         logger.info(f"Loading All {collection_level.capitalize()} from Library: {self.name}")
@@ -553,17 +553,19 @@ class Emby(Library):
         for s in library_results.items:
             if s.name == self.name:
                 library_id = s.id
+                break
         #Only grab necessary fields when grabbing all items to map_guids
         if mapping:
             fields = 'ProviderIds'
         else:
             fields = 'ProviderIds'
-            #fields = 'CriticRating,CustomRating,CommunityRating,Genres,\
-            #LockedFields,OfficialRating,ProviderIds,SortName,Studios'
+        if collection_level == 'Movies':
+            item_types = 'Movie'
+        elif collection_level == 'Tvshows':
+            item_types = 'Series'
         results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                parent_id=library_id, fields=fields)
+                    parent_id=library_id, recursive=True, include_item_types=item_types, fields=fields)
         logger.info(f"Loaded {len(results.items)} {collection_level.capitalize()}")
-        #print(results)
         self._all_items = results
         return results
 
@@ -632,19 +634,25 @@ class Emby(Library):
     def _upload_image(self, item, image):
         try:
             if image.is_poster and image.is_url:
-                #TODO: Update to URL based call
-                embyapi.ImageServiceApi(self.EmbyServer).post_items_by_id_images_by_type(body=image.location, id=item.id, type='Primary')
-                #item.uploadPoster(url=image.location)
+                type_ = 'Primary'
+                embyapi.RemoteImageServiceApi(self.EmbyServer).post_items_by_id_remoteimages_download(
+                    id=item.id, type=type_, image_url=image.location
+                )
             elif image.is_poster:
                 type_ = 'Primary'
                 with open(image.location, "rb") as image_:
                     b64string = str(base64.b64encode(image_.read())).strip("b'").rstrip("'")
                 embyapi.ImageServiceApi(self.EmbyServer).post_items_by_id_images_by_type(b64string, item.id, type_)
             elif image.is_url:
-                item.uploadArt(url=image.location)
+                type_ = 'Backdrop'
+                embyapi.RemoteImageServiceApi(self.EmbyServer).post_items_by_id_remoteimages_download(
+                    id=item.id, type=type_, image_url=image.location
+                )
             else:
-                item.uploadArt(filepath=image.location)
-            #self.reload(item)
+                type_ = 'Backdrop'
+                with open(image.location, "rb") as image_:
+                    b64string = str(base64.b64encode(image_.read())).strip("b'").rstrip("'")
+                embyapi.ImageServiceApi(self.EmbyServer).post_items_by_id_images_by_type(b64string, item.id, type_)
         except BadRequest as e:
             item.refresh()
             raise Failed(e)
@@ -1053,48 +1061,55 @@ class Emby(Library):
                     self.upload_images(item, poster=poster, background=background, overlay=overlay)
                 else:
                     return poster, background, item_dir
-            if isinstance(item, Show):
+            if itemType == 'Series':
                 missing_seasons = ""
                 missing_episodes = ""
                 found_season = False
                 found_episode = False
-                for season in self.query(item.seasons):
-                    season_name = f"Season{'0' if season.seasonNumber < 10 else ''}{season.seasonNumber}"
-                    if item_dir:
-                        season_poster_filter = os.path.join(item_dir, f"{season_name}.*")
-                        season_background_filter = os.path.join(item_dir, f"{season_name}_background.*")
-                    else:
-                        season_poster_filter = os.path.join(ad, f"{name}_{season_name}.*")
-                        season_background_filter = os.path.join(ad, f"{name}_{season_name}_background.*")
-                    season_poster = None
-                    season_background = None
-                    matches = util.glob_filter(season_poster_filter)
-                    if len(matches) > 0:
-                        season_poster = ImageData("asset_directory", os.path.abspath(matches[0]), prefix=f"{item.title} Season {season.seasonNumber}'s ", is_url=False)
-                        found_season = True
-                    elif self.show_missing_season_assets and season.seasonNumber > 0:
-                        missing_seasons += f"\nMissing Season {season.seasonNumber} Poster"
-                    matches = util.glob_filter(season_background_filter)
-                    if len(matches) > 0:
-                        season_background = ImageData("asset_directory", os.path.abspath(matches[0]), prefix=f"{item.title} Season {season.seasonNumber}'s ", is_poster=False, is_url=False)
-                    if season_poster or season_background:
-                        self.upload_images(season, poster=season_poster, background=season_background)
-                    for episode in self.query(season.episodes):
-                        if episode.seasonEpisode:
-                            if item_dir:
-                                episode_filter = os.path.join(item_dir, f"{episode.seasonEpisode.upper()}.*")
-                            else:
-                                episode_filter = os.path.join(ad, f"{name}_{episode.seasonEpisode.upper()}.*")
-                            matches = util.glob_filter(episode_filter)
-                            if len(matches) > 0:
-                                episode_poster = ImageData("asset_directory", os.path.abspath(matches[0]), prefix=f"{item.title} {episode.seasonEpisode.upper()}'s ", is_url=False)
-                                found_episode = True
-                                self.upload_images(episode, poster=episode_poster)
-                            elif self.show_missing_episode_assets:
-                                missing_episodes += f"\nMissing {episode.seasonEpisode.upper()} Title Card"
+                seasons = embyapi.TvShowsServiceApi(self.EmbyServer).get_shows_by_id_seasons(user_id=self.user_id,
+                    id=item.id)
+
+                for season in seasons.items:
+                    if season.index_number:
+                        season_name = f"Season{'0' if season.index_number < 10 else ''}{season.index_number}"
+                        if item_dir:
+                            season_poster_filter = os.path.join(item_dir, f"{season_name}.*")
+                            season_background_filter = os.path.join(item_dir, f"{season_name}_background.*")
+                        else:
+                            season_poster_filter = os.path.join(ad, f"{name}_{season_name}.*")
+                            season_background_filter = os.path.join(ad, f"{name}_{season_name}_background.*")
+                        season_poster = None
+                        season_background = None
+                        matches = util.glob_filter(season_poster_filter)
+                        if len(matches) > 0:
+                            season_poster = ImageData("asset_directory", os.path.abspath(matches[0]), prefix=f"{item.name} Season {season.index_number}'s ", is_url=False)
+                            found_season = True
+                        elif self.show_missing_season_assets and season.index_number > 0:
+                            missing_seasons += f"\nMissing Season {season.index_number} Poster"
+                        matches = util.glob_filter(season_background_filter)
+                        if len(matches) > 0:
+                            season_background = ImageData("asset_directory", os.path.abspath(matches[0]), prefix=f"{item.title} Season {season.index_number}'s ", is_poster=False, is_url=False)
+                        if season_poster or season_background:
+                            self.upload_images(season, poster=season_poster, background=season_background)
+                        episodes = embyapi.TvShowsServiceApi(self.EmbyServer).get_shows_by_id_episodes(user_id=self.user_id,
+                            id=item.id, season_id=season.id)
+                        for episode in episodes.items:
+                            if episode.index_number:
+                                seasonEpisode = f"S{'0' if season.index_number < 10 else ''}{season.index_number}E{'0' if episode.index_number < 10 else ''}{episode.index_number}"
+                                if item_dir:
+                                    episode_filter = os.path.join(item_dir, f"{seasonEpisode}.*")
+                                else:
+                                    episode_filter = os.path.join(ad, f"{name}_{seasonEpisode}.*")
+                                matches = util.glob_filter(episode_filter)
+                                if len(matches) > 0:
+                                    episode_poster = ImageData("asset_directory", os.path.abspath(matches[0]), prefix=f"{item.name} {seasonEpisode}'s ", is_url=False)
+                                    found_episode = True
+                                    self.upload_images(episode, poster=episode_poster)
+                                elif self.show_missing_episode_assets:
+                                    missing_episodes += f"\nMissing {seasonEpisode} Title Card"
 
                 if (found_season and missing_seasons) or (found_episode and missing_episodes):
-                    output = f"Missing Posters for {item.title}"
+                    output = f"Missing Posters for {item.name}"
                     if found_season:
                         output += missing_seasons
                     if found_episode:
