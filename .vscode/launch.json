@@ -28,8 +28,7 @@
             "program": "plex_meta_manager.py",
             "args": [
                 "--debug",
-                "-r",
-                "-l", "TV Shows"
+                "-r"
             ],
             "console": "integratedTerminal",
             "justMyCode": false
@@ -42,7 +41,7 @@
             "args": [
                 "--debug",
                 "-r",
-                "--run-collections", "28 Days/Weeks Later"
+                "--run-collections", "Popular on Plex"
             ],
             "console": "integratedTerminal",
             "justMyCode": false

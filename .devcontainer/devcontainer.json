@@ -11,6 +11,7 @@
 
 	// Set *default* container specific settings.json values on container create.
 	"settings": { 
+		"dns": ["192.168.1.1"],
 		"terminal.integrated.profiles.linux": {
 			"bash": {
 				"path": "/bin/bash"
@@ -38,7 +39,7 @@
 	],
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	"forwardPorts": [],
+	//"forwardPorts": [],
 
 	"mounts": [
 		"source=/mnt/oasis/media/posters,target=/workspace/assets,type=bind,consistency=cached"

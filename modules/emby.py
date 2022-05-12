@@ -493,25 +493,6 @@ class Emby(Library):
         return collections
 
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
-    def search(self, title=None, libtype=None, sort=None, maxresults=None, **kwargs):
-        results = []
-        if libtype == 'collection':
-            if title:
-                results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, search_term=title, include_item_types='boxset')
-        else:
-            print("How did we get here?")
-        return results
-
-    @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
-    def exact_search(self, title, libtype=None, year=None):
-        if year:
-            terms = {"title=": title, "year": year}
-        else:
-            terms = {"title=": title}
-        return self.Emby.search(libtype=libtype, **terms)
-
-    @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
     def get_labeled_items(self, label):
         return self.Emby.search(label=label)
 
@@ -938,6 +919,26 @@ class Emby(Library):
 
     def get_tvdb_from_map(self, item):
         return self.show_rating_key_map[item.id] if item.id in self.show_rating_key_map else None
+
+    #@retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
+    def exact_search(self, title, libtype=None, year=None):
+        return self.search(libtype=libtype, title=title, year=year)
+        
+    #@retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
+    def search(self, title=None, libtype=None, sort=None, maxresults=None, year=None, **kwargs):
+        results = []
+        if libtype == 'collection':
+            if title:
+                results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+                    recursive=True, search_term=title, include_item_types='boxset')
+        elif libtype == 'Movies':
+            if title and not year:
+                results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+                    recursive=True, search_term=title, include_item_types='Movie')
+            if title and year:
+                results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+                    recursive=True, search_term=title, years=year, include_item_types='Movie')
+        return results
 
     def search_item(self, data, year=None):
         kwargs = {}
