@@ -45,10 +45,16 @@ class Tautulli:
                 if int(item[stat_type]) < params['list_minimum']:
                     continue
                 try:
-                    plex_item = library.fetchItem(int(item["rating_key"]))
-                    if not isinstance(plex_item, (Movie, Show)):
-                        raise BadRequest
-                    rating_keys.append((item["rating_key"], "ratingKey"))
+                    if library.Emby:
+                        emby_item = library.exact_search(item["title"], libtype=library.type, year=item["year"])
+                        if not emby_item:
+                            raise BadRequest
+                        rating_keys.append((emby_item.items[0].id, "ratingKey"))
+                    else:
+                        plex_item = library.fetchItem(int(item["rating_key"]))
+                        if not isinstance(plex_item, (Movie, Show)):
+                            raise BadRequest
+                        rating_keys.append((item["rating_key"], "ratingKey"))
                 except (BadRequest, NotFound):
                     new_item = library.exact_search(item["title"], year=item["year"])
                     if new_item:
