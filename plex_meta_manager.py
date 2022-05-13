@@ -477,9 +477,6 @@ def emby_library_operations(config, library):
                         new_rating = trakt_ratings[tvdb_id]
                     else:
                         raise Failed
-                    #Unsure which field to fill..
-                    # item.community_rating, item.custom_rating, item.userdata.rating
-                    # Probably item.userdata.rating
                     if str(item.user_data.rating) != str(new_rating):
                         item.user_data.rating = new_rating
                         logger.info(f"{item.name[:25]:<25} | User Rating | {new_rating}")
@@ -705,13 +702,13 @@ def emby_library_operations(config, library):
                         raise Failed
                     if new_date is None:
                         logger.info(f"{item.name[:25]:<25} | No Originally Available Date Found")
-                    elif str(item.originallyAvailableAt) != str(new_date):
-                        item.editOriginallyAvailable(new_date)
+                    elif str(item.premiere_date) != str(new_date):
+                        item.premiere_date = new_date
                         batch_display += f"\n{item.name[:25]:<25} | Originally Available Date | {new_date.strftime('%Y-%m-%d')}"
                         logger.info(f"{item.name[:25]:<25} | Originally Available Date | {new_date.strftime('%Y-%m-%d')}")
                 except Failed:
                     pass
-            
+            item.user_data.is_favorite = True
             library.update_item(item, item.id)
 
         if library.Radarr and library.radarr_add_all_existing:
