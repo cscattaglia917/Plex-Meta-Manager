@@ -415,6 +415,7 @@ class Emby(Library):
             logger.stacktrace()
             raise Failed("Emby Error: Emby url is invalid")
         self.Emby = None
+        self.library_id = None
         library_names = []
         library_results = embyapi.LibraryServiceApi(self.EmbyServer).get_library_mediafolders()
         #print(library_results)
@@ -423,6 +424,7 @@ class Emby(Library):
             #print("DEBUG:: s.name ==", s.name)
             if s.name == params["name"]:
                 self.Emby = s
+                self.library_id = s.id
                 break
         if not self.Emby:
             raise Failed(f"Emby Error: Emby Library '{params['name']}' not found. Options: {library_names}")
@@ -463,6 +465,11 @@ class Emby(Library):
         self._all_items = []
         self.is_movie = self.type == "Movies"
         self.is_show = self.type == "Tvshows"
+        self.item_types = None
+        if self.is_movie:
+            self.item_types = 'Movie'
+        elif self.is_show:
+            self.item_types = 'Series'
         self.is_music = self.type == "music"
         self.is_other = self.type == "other"
         #if self.is_other and self.type == "Movie":
@@ -485,10 +492,9 @@ class Emby(Library):
         self.PlexServer.settings.save()
 
     def get_all_collections(self):
-        #fields  = self.fields
-        #fields = 'Overview,ProviderIds,ChildCount,Studios'
+        fields = 'ChildCount'
         collections = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, include_item_types='boxset')
+                    parent_id=self.library_id, recursive=True, include_item_types='BoxSet', fields=fields)
         collections = collections.items
         return collections
 
@@ -540,12 +546,12 @@ class Emby(Library):
             fields = 'ProviderIds'
         else:
             fields = 'ProviderIds'
-        if collection_level == 'Movies':
-            item_types = 'Movie'
-        elif collection_level == 'Tvshows':
-            item_types = 'Series'
+        # if collection_level == 'Movies':
+        #     item_types = 'Movie'
+        # elif collection_level == 'Tvshows':
+        #     item_types = 'Series'
         results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    parent_id=library_id, recursive=True, include_item_types=item_types, fields=fields)
+                    parent_id=library_id, recursive=True, include_item_types=self.item_types, fields=fields)
         logger.info(f"Loaded {len(results.items)} {collection_level.capitalize()}")
         self._all_items = results
         return results
@@ -896,8 +902,6 @@ class Emby(Library):
         return name, collection_id, collection_items
 
     def get_collection_id(self, collection):
-        #fields = self.fields
-        #fields = 'ProviderIds,SortName'
         if collection:
             collections = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
                 recursive=True, search_term=collection, include_item_types='boxset')
@@ -934,10 +938,10 @@ class Emby(Library):
         elif libtype == 'Movies':
             if title and not year:
                 results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, search_term=title, include_item_types='Movie')
+                    recursive=True, search_term=title, include_item_types=self.item_types)
             if title and year:
                 results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, search_term=title, years=year, include_item_types='Movie')
+                    recursive=True, search_term=title, years=year, include_item_types=self.item_types)
         return results
 
     def search_item(self, data, year=None):

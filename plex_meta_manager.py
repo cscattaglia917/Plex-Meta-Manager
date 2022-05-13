@@ -708,7 +708,7 @@ def emby_library_operations(config, library):
                         logger.info(f"{item.name[:25]:<25} | Originally Available Date | {new_date.strftime('%Y-%m-%d')}")
                 except Failed:
                     pass
-            item.user_data.is_favorite = True
+            #item.user_data.is_favorite = True
             library.update_item(item, item.id)
 
         if library.Radarr and library.radarr_add_all_existing:
@@ -784,8 +784,8 @@ def emby_library_operations(config, library):
     for col in library.get_all_collections():
         if (library.delete_collections_with_less and col.child_count < library.delete_collections_with_less) \
             or (library.delete_unmanaged_collections and col.name not in library.collections):
-            library.query(col.delete) #TODO: adjust for Emby
-            logger.info(f"{col.title} Deleted")
+            library.delete_collection(col) #TODO: adjust for Emby
+            logger.info(f"{col.name} Deleted")
         elif col.name not in library.collections:
             unmanaged_collections.append(col)
     if library.mass_collection_mode:
