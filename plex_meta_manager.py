@@ -213,7 +213,6 @@ def update_emby_libraries(config):
             logger.separator(f"{library.name} Library")
 
             if config.library_first and library.library_operation and not config.test_mode and not collection_only:
-                #TODO: Replace with Emby specific operations
                 emby_library_operations(config, library)
 
             logger.debug("")
@@ -419,12 +418,14 @@ def emby_library_operations(config, library):
     logger.debug(f"Item Operation: {library.items_library_operation}")
     logger.debug("")
 
+    #TODO: Don't think there is a good way to do this in Emby
     if library.split_duplicates:
         items = library.search(**{"duplicate": True})
         for item in items:
             item.split()
             logger.info(f"{item.title[:25]:<25} | Splitting")
 
+    #TODO: Need music library in Emby
     if library.update_blank_track_titles:
         tracks = library.get_all(collection_level="track")
         num_edited = 0
@@ -460,7 +461,6 @@ def emby_library_operations(config, library):
                 library.find_assets(item)
             tmdb_id, tvdb_id, imdb_id = library.get_ids(item)
 
-            #TODO: No batch edit function for Emby API
             batch_display = "Batch Edits"
 
             if library.remove_title_parentheses: 
@@ -478,6 +478,7 @@ def emby_library_operations(config, library):
                     else:
                         raise Failed
                     if str(item.user_data.rating) != str(new_rating):
+                        #TODO: This doesn't seem to stick - opened message on Emby dev forums.
                         item.user_data.rating = new_rating
                         logger.info(f"{item.name[:25]:<25} | User Rating | {new_rating}")
                 except Failed:
@@ -657,6 +658,7 @@ def emby_library_operations(config, library):
                         item.critic_rating = new_rating
                         batch_display += f"{item.name[:25]:<25} | Critic Rating | {new_rating}"
                         logger.info(f"{item.name[:25]:<25} | Critic Rating | {new_rating}")
+                        
             if library.mass_content_rating_update or library.content_rating_mapper:
                 try:
                     new_rating = None
@@ -674,6 +676,7 @@ def emby_library_operations(config, library):
                             raise Failed
                         if new_rating is None:
                             logger.info(f"{item.name[:25]:<25} | No Content Rating Found")
+                    #TODO: I don't think thas has been tested
                     if library.content_rating_mapper:
                         if new_rating is None:
                             new_rating = item.official_rating
@@ -685,7 +688,7 @@ def emby_library_operations(config, library):
                         logger.info(f"{item.name[:25]:<25} | Content Rating | {new_rating}")
                 except Failed:
                     pass
-            #TODO: May need to do some conversion from premiere_date to verify item.premiere_date == new_date
+                
             if library.mass_originally_available_update:
                 try:
                     if omdb_item and library.mass_originally_available_update == "omdb":
