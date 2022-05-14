@@ -418,10 +418,8 @@ class Emby(Library):
         self.library_id = None
         library_names = []
         library_results = embyapi.LibraryServiceApi(self.EmbyServer).get_library_mediafolders()
-        #print(library_results)
         for s in library_results.items:
             library_names.append(s.name)
-            #print("DEBUG:: s.name ==", s.name)
             if s.name == params["name"]:
                 self.Emby = s
                 self.library_id = s.id
@@ -438,6 +436,7 @@ class Emby(Library):
         for user in users:
             if user.name == self.configuration.user_name: 
                 self.user_id = user.id
+                break
         
         if self.configuration.password:
             self.adminConfiguration = embyapi.Configuration()
@@ -502,7 +501,6 @@ class Emby(Library):
     def get_labeled_items(self, label):
         return self.Emby.search(label=label)
 
-
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
     def fetchItem(self, data):
         results = []
@@ -511,11 +509,11 @@ class Emby(Library):
         return results
 
     def update_item(self, body, id):
-        itemResults = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(self.user_id, id)
         # Need to grab results for the specific item so that we include all current values in the POST request.
         # Convert both itemResults and body to dicts, then update itemDict with values from bodyDict, if the value is not null.
         # Build a new BaseItemDTO object and insert itemDict values into said object if values are not null.
         # Post newItem object with all existing data + new data.
+        itemResults = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(self.user_id, id)
         itemDict = itemResults.to_dict()
         bodyDict = body.to_dict()
         itemDict.update( (k,v) for k,v in bodyDict.items() if v is not None)
@@ -535,23 +533,13 @@ class Emby(Library):
         if not collection_level:
             collection_level = self.type
         logger.info(f"Loading All {collection_level.capitalize()} from Library: {self.name}")
-        library_id = None
-        library_results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id)
-        for s in library_results.items:
-            if s.name == self.name:
-                library_id = s.id
-                break
         #Only grab necessary fields when grabbing all items to map_guids
         if mapping:
             fields = 'ProviderIds'
         else:
             fields = 'ProviderIds'
-        # if collection_level == 'Movies':
-        #     item_types = 'Movie'
-        # elif collection_level == 'Tvshows':
-        #     item_types = 'Series'
         results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    parent_id=library_id, recursive=True, include_item_types=self.item_types, fields=fields)
+                    parent_id=self.library_id, recursive=True, include_item_types=self.item_types, fields=fields)
         logger.info(f"Loaded {len(results.items)} {collection_level.capitalize()}")
         self._all_items = results
         return results
