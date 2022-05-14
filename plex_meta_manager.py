@@ -658,7 +658,7 @@ def emby_library_operations(config, library):
                         item.critic_rating = new_rating
                         batch_display += f"{item.name[:25]:<25} | Critic Rating | {new_rating}"
                         logger.info(f"{item.name[:25]:<25} | Critic Rating | {new_rating}")
-                        
+
             if library.mass_content_rating_update or library.content_rating_mapper:
                 try:
                     new_rating = None
@@ -787,10 +787,11 @@ def emby_library_operations(config, library):
     for col in library.get_all_collections():
         if (library.delete_collections_with_less and col.child_count < library.delete_collections_with_less) \
             or (library.delete_unmanaged_collections and col.name not in library.collections):
-            library.delete_collection(col) #TODO: adjust for Emby
+            library.delete_collection(col)
             logger.info(f"{col.name} Deleted")
         elif col.name not in library.collections:
             unmanaged_collections.append(col)
+    #TODO: Adapt for Emby? Not sure what options would be possible
     if library.mass_collection_mode:
         logger.info("")
         logger.separator(f"Mass Collection Mode for {library.name} Library", space=False, border=False)
@@ -818,6 +819,7 @@ def emby_library_operations(config, library):
         for col in unmanaged_collections:
             library.find_assets(col)
 
+    #TODO: Metadata backup adaptation possible?
     if library.metadata_backup:
         logger.info("")
         logger.separator(f"Metadata Backup for {library.name} Library", space=False, border=False)
@@ -840,10 +842,11 @@ def emby_library_operations(config, library):
             meta = {}
         if "metadata" not in meta:
             meta["metadata"] = {}
-        items = library.get_all(load=True)
-        titles = [i.title for i in items]
+        itemList = library.get_all(load=True)
+        items = itemList.items
+        titles = [i.name for i in items]
         for i, item in enumerate(items, 1):
-            logger.ghost(f"Processing: {i}/{len(items)} {item.title}")
+            logger.ghost(f"Processing: {i}/{len(items)} {item.name}")
             map_key, attrs = library.get_locked_attributes(item, titles)
             if attrs or library.metadata_backup["add_blank_entries"]:
                 def get_dict(attrs_dict):
