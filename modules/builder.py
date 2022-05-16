@@ -322,6 +322,8 @@ class CollectionBuilder:
         self.deleted = False
         self.sync_to_users = None
         self.valid_users = []
+        self.favorite = False
+        self.favorite_all = False
 
         if self.playlist:
             server_check = None
@@ -662,6 +664,10 @@ class CollectionBuilder:
                     self._mdblist(method_name, method_data)
                 elif method_name == "filters":
                     self._filters(method_name, method_data)
+                elif method_name == "favorite":
+                    self._favorite(method_name, method_data)
+                elif method_name == "favorite_all":
+                    self._favorite_all(method_name, method_data)
                 else:
                     raise Failed(f"{self.Type} Error: {method_final} attribute not supported")
             except Failed as e:
@@ -1347,6 +1353,12 @@ class CollectionBuilder:
                 else:
                     logger.error(message)
 
+    def _favorite(self, method_name, method_data):
+        self.favorite = method_data
+    
+    def _favorite_all(self, method_name, method_data):
+        self.favorite_all = method_data
+
     def gather_ids(self, method, value):
         expired = None
         list_key = None
@@ -1862,6 +1874,13 @@ class CollectionBuilder:
         except (BadRequest, NotFound):
             raise Failed(f"Plex Error: Item {item} not found")
 
+    def favorite_collection(self, recursive=False):
+        collection_id, collection_items = self.library.get_collection_id_and_items(self.obj.name if self.obj else self.name, self.smart_label_collection)
+        if recursive:
+            self.library.favorite_collection(collection_id, collection_items)
+        else:
+            self.library.favorite_collection(collection_id)
+
     def add_to_collection(self):
         logger.info("")
         logger.separator(f"Adding to {self.name} {self.Type}", space=False, border=False)
@@ -1950,7 +1969,7 @@ class CollectionBuilder:
             for i, item in enumerate(items, 1):
                 self.library.reload(item)
                 number_text = f"{i}/{total}"
-                logger.info(f"{number_text:>{spacing}} | {self.name} {self.Type} | - | {util.item_title(item)}")
+                logger.info(f"{number_text:>{spacing}} | {self.name} {self.Type} | - | {item.name}")
                 if self.playlist:
                     playlist_removes.append(item)
                 else:
