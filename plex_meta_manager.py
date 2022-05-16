@@ -1673,6 +1673,12 @@ def run_collection(config, library, metadata, requested_collections):
                         items_removed = builder.sync_collection()
                         library.stats["removed"] += items_removed
                         library.status[mapping_name]["removed"] = items_removed
+                
+                if builder.favorite or builder.favorite_all:
+                    if builder.favorite_all:
+                        builder.favorite_collection(recursive=True)
+                    else:
+                        builder.favorite_collection()
 
                 if builder.do_missing and (len(builder.missing_movies) > 0 or len(builder.missing_shows) > 0):
                     radarr_add, sonarr_add = builder.run_missing()

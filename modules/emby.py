@@ -508,12 +508,33 @@ class Emby(Library):
             id=data)
         return results
 
+    def get_all_favorites(self):
+        fields = self.fields
+        results = []
+        results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+                filters='IsFavorite', recursive=True, fields=fields)
+        return results
+
+    def is_favorite(self, item):
+        if item is not None:
+            favorite_status = item.user_data.is_favorite
+        else:
+            return None
+        return favorite_status
+
+    def favorite_collection(self, collection_id, collection_items=None):
+        if collection_items:
+            #if collection_items is true - favorite all items - then collection itself.
+            for item in collection_items:
+               embyapi.UserLibraryServiceApi(self.EmbyServer).post_users_by_userid_favoriteitems_by_id(user_id=self.user_id, id=item.id)
+        embyapi.UserLibraryServiceApi(self.EmbyServer).post_users_by_userid_favoriteitems_by_id(user_id=self.user_id, id=collection_id)
+
     def update_item(self, body, id):
         # Need to grab results for the specific item so that we include all current values in the POST request.
         # Convert both itemResults and body to dicts, then update itemDict with values from bodyDict, if the value is not null.
         # Build a new BaseItemDTO object and insert itemDict values into said object if values are not null.
         # Post newItem object with all existing data + new data.
-        itemResults = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(self.user_id, id)
+        itemResults = embyapi.UserLibraryServiceApi(self.EmbyAdminServer).get_users_by_userid_items_by_id(self.user_id, id)
         itemDict = itemResults.to_dict()
         bodyDict = body.to_dict()
         itemDict.update( (k,v) for k,v in bodyDict.items() if v is not None)
@@ -521,7 +542,7 @@ class Emby(Library):
         for item in itemDict:
             if itemDict[item] is not None:
                 setattr(newItem, item, itemDict[item])
-        embyapi.ItemUpdateServiceApi(self.EmbyServer).post_items_by_itemid(newItem, id)
+        embyapi.ItemUpdateServiceApi(self.EmbyAdminServer).post_items_by_itemid(newItem, id)
 
     def get_all(self, collection_level=None, load=False, mapping=False):
         results = []
@@ -538,7 +559,7 @@ class Emby(Library):
             fields = 'ProviderIds'
         else:
             fields = 'ProviderIds'
-        results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+        results = embyapi.ItemsServiceApi(self.EmbyAdminServer).get_users_by_userid_items(user_id=self.user_id,
                     parent_id=self.library_id, recursive=True, include_item_types=self.item_types, fields=fields)
         logger.info(f"Loaded {len(results.items)} {collection_level.capitalize()}")
         self._all_items = results
