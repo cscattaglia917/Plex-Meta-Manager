@@ -213,7 +213,6 @@ def update_emby_libraries(config):
             logger.separator(f"{library.name} Library")
 
             if config.library_first and library.library_operation and not config.test_mode and not collection_only:
-                #TODO: Replace with Emby specific operations
                 emby_library_operations(config, library)
 
             logger.debug("")
@@ -419,12 +418,14 @@ def emby_library_operations(config, library):
     logger.debug(f"Item Operation: {library.items_library_operation}")
     logger.debug("")
 
+    #TODO: Don't think there is a good way to do this in Emby
     if library.split_duplicates:
         items = library.search(**{"duplicate": True})
         for item in items:
             item.split()
             logger.info(f"{item.title[:25]:<25} | Splitting")
 
+    #TODO: Need music library in Emby
     if library.update_blank_track_titles:
         tracks = library.get_all(collection_level="track")
         num_edited = 0
@@ -460,7 +461,6 @@ def emby_library_operations(config, library):
                 library.find_assets(item)
             tmdb_id, tvdb_id, imdb_id = library.get_ids(item)
 
-            #TODO: No batch edit function for Emby API
             batch_display = "Batch Edits"
 
             if library.remove_title_parentheses: 
@@ -477,10 +477,8 @@ def emby_library_operations(config, library):
                         new_rating = trakt_ratings[tvdb_id]
                     else:
                         raise Failed
-                    #Unsure which field to fill..
-                    # item.community_rating, item.custom_rating, item.userdata.rating
-                    # Probably item.userdata.rating
                     if str(item.user_data.rating) != str(new_rating):
+                        #TODO: This doesn't seem to stick - opened message on Emby dev forums.
                         item.user_data.rating = new_rating
                         logger.info(f"{item.name[:25]:<25} | User Rating | {new_rating}")
                 except Failed:
@@ -525,7 +523,7 @@ def emby_library_operations(config, library):
                             logger.error(f"IMDb ID: {imdb_id}")
                             raise
                     else:
-                        logger.info(f"{item.title[:25]:<25} | No IMDb ID for Guid: {item.guid}")
+                        logger.info(f"{item.name[:25]:<25} | No IMDb ID for Guid: {item.id}")
 
             tvdb_item = None
             if any([o == "tvdb" for o in library.meta_operations]):
@@ -535,19 +533,19 @@ def emby_library_operations(config, library):
                     except Failed as e:
                         logger.error(str(e))
                 else:
-                    logger.info(f"{item.title[:25]:<25} | No TVDb ID for Guid: {item.guid}")
+                    logger.info(f"{item.name[:25]:<25} | No TVDb ID for Guid: {item.id}")
 
             anidb_item = None
             if any([o == "anidb" for o in library.meta_operations]):
-                if item.ratingKey in reverse_anidb:
-                    anidb_id = reverse_anidb[item.ratingKey]
+                if item.id in reverse_anidb:
+                    anidb_id = reverse_anidb[item.id]
                 elif tvdb_id in config.Convert._tvdb_to_anidb:
                     anidb_id = config.Convert._tvdb_to_anidb[tvdb_id]
                 elif imdb_id in config.Convert._imdb_to_anidb:
                     anidb_id = config.Convert._imdb_to_anidb[imdb_id]
                 else:
                     anidb_id = None
-                    logger.info(f"{item.title[:25]:<25} | No AniDB ID for Guid: {item.guid}")
+                    logger.info(f"{item.name[:25]:<25} | No AniDB ID for Guid: {item.id}")
                 if anidb_id:
                     try:
                         anidb_item = config.AniDB.get_anime(anidb_id)
@@ -570,7 +568,7 @@ def emby_library_operations(config, library):
                             logger.error(f"IMDb ID: {imdb_id}")
                             raise
                     else:
-                        logger.info(f"{item.title[:25]:<25} | No IMDb ID for Guid: {item.guid}")
+                        logger.info(f"{item.name[:25]:<25} | No IMDb ID for Guid: {item.id}")
 
             if library.tmdb_collections and tmdb_item and tmdb_item.collection_id:
                 tmdb_collections[tmdb_item.collection_id] = tmdb_item.collection_name
@@ -603,8 +601,11 @@ def emby_library_operations(config, library):
                 elif anidb_item and attribute == "anidb_average":
                     return anidb_item.average
                 else:
-                    raise Failed
-
+                    #TODO: What to do if no IMDB ID, etc.?
+                    logger.info(f"{item.name[:25]:<25} | Unable to obtain rating for: {item.id}")
+                    #raise Failed
+            
+            #TODO: Map genres to item.
             if library.mass_genre_update or library.genre_mapper:
                 new_genres = []
                 if library.mass_genre_update:
@@ -619,7 +620,7 @@ def emby_library_operations(config, library):
                     else:
                         raise Failed
                     if not new_genres:
-                        logger.info(f"{item.title[:25]:<25} | No Genres Found")
+                        logger.info(f"{item.name[:25]:<25} | No Genres Found")
                 if library.genre_mapper:
                     if not new_genres:
                         new_genres = [g.tag for g in item.genres]
@@ -636,18 +637,28 @@ def emby_library_operations(config, library):
             if library.mass_audience_rating_update:
                 new_rating = get_rating(library.mass_audience_rating_update)
                 if new_rating is None:
-                    logger.info(f"{item.title[:25]:<25} | No Rating Found")
-                elif str(item.audienceRating) != str(new_rating):
-                    item.editField("audienceRating", new_rating)
-                    batch_display += f"\n{item.title[:25]:<25} | Audience Rating | {new_rating}"
+                    logger.info(f"{item.name[:25]:<25} | No Rating Found")
+                elif str(item.community_rating) != str(new_rating):
+                    #Needs to be less than 10
+                    if new_rating > 10:
+                        new_rating = new_rating / 10
+                    item.community_rating = new_rating
+                    batch_display += f"\n{item.name[:25]:<25} | Audience Rating | {new_rating}"
+                    logger.info(f"{item.name[:25]:<25} | Audience Rating | {new_rating}")
 
             if library.mass_critic_rating_update:
                 new_rating = get_rating(library.mass_critic_rating_update)
                 if new_rating is None:
-                    logger.info(f"{item.title[:25]:<25} | No Rating Found")
-                elif str(item.rating) != str(new_rating):
-                    item.editField("rating", new_rating)
-                    batch_display += f"{item.title[:25]:<25} | Critic Rating | {new_rating}"
+                    logger.info(f"{item.name[:25]:<25} | No Rating Found")
+                else:
+                    #item.critic_rating needs to be out of 100
+                    if new_rating <= 10:
+                        new_rating = new_rating * 10
+                    if str(item.critic_rating) != str(new_rating):
+                        item.critic_rating = new_rating
+                        batch_display += f"{item.name[:25]:<25} | Critic Rating | {new_rating}"
+                        logger.info(f"{item.name[:25]:<25} | Critic Rating | {new_rating}")
+
             if library.mass_content_rating_update or library.content_rating_mapper:
                 try:
                     new_rating = None
@@ -659,21 +670,25 @@ def emby_library_operations(config, library):
                         elif mdb_item and library.mass_content_rating_update == "mdb_commonsense":
                             new_rating = mdb_item.commonsense if mdb_item.commonsense else None
                         elif tmdb_item and library.mass_content_rating_update == "tmdb":
+                            #tmdb_item does not have a content_rating attribute, unlike all the others
                             new_rating = tmdb_item.content_rating if tmdb_item.content_rating else None
                         else:
                             raise Failed
                         if new_rating is None:
-                            logger.info(f"{item.title[:25]:<25} | No Content Rating Found")
+                            logger.info(f"{item.name[:25]:<25} | No Content Rating Found")
+                    #TODO: I don't think thas has been tested
                     if library.content_rating_mapper:
                         if new_rating is None:
-                            new_rating = item.contentRating
+                            new_rating = item.official_rating
                         if new_rating in library.content_rating_mapper:
                             new_rating = library.content_rating_mapper[new_rating]
-                    if str(item.contentRating) != str(new_rating):
-                        item.editContentRating(new_rating)
-                        batch_display += f"\n{item.title[:25]:<25} | Content Rating | {new_rating}"
+                    if str(item.official_rating) != str(new_rating):
+                        item.official_rating = new_rating
+                        batch_display += f"\n{item.name[:25]:<25} | Content Rating | {new_rating}"
+                        logger.info(f"{item.name[:25]:<25} | Content Rating | {new_rating}")
                 except Failed:
                     pass
+                
             if library.mass_originally_available_update:
                 try:
                     if omdb_item and library.mass_originally_available_update == "omdb":
@@ -689,15 +704,15 @@ def emby_library_operations(config, library):
                     else:
                         raise Failed
                     if new_date is None:
-                        logger.info(f"{item.title[:25]:<25} | No Originally Available Date Found")
-                    elif str(item.originallyAvailableAt) != str(new_date):
-                        item.editOriginallyAvailable(new_date)
-                        batch_display += f"\n{item.title[:25]:<25} | Originally Available Date | {new_date.strftime('%Y-%m-%d')}"
+                        logger.info(f"{item.name[:25]:<25} | No Originally Available Date Found")
+                    elif str(item.premiere_date) != str(new_date):
+                        item.premiere_date = new_date
+                        batch_display += f"\n{item.name[:25]:<25} | Originally Available Date | {new_date.strftime('%Y-%m-%d')}"
+                        logger.info(f"{item.name[:25]:<25} | Originally Available Date | {new_date.strftime('%Y-%m-%d')}")
                 except Failed:
                     pass
-            
-            #POST newItem here?
-            #item.saveEdits()
+            #item.user_data.is_favorite = True
+            library.update_item(item, item.id)
 
         if library.Radarr and library.radarr_add_all_existing:
             try:
@@ -772,10 +787,11 @@ def emby_library_operations(config, library):
     for col in library.get_all_collections():
         if (library.delete_collections_with_less and col.child_count < library.delete_collections_with_less) \
             or (library.delete_unmanaged_collections and col.name not in library.collections):
-            library.query(col.delete) #TODO: adjust for Emby
-            logger.info(f"{col.title} Deleted")
+            library.delete_collection(col)
+            logger.info(f"{col.name} Deleted")
         elif col.name not in library.collections:
             unmanaged_collections.append(col)
+    #TODO: Adapt for Emby? Not sure what options would be possible
     if library.mass_collection_mode:
         logger.info("")
         logger.separator(f"Mass Collection Mode for {library.name} Library", space=False, border=False)
@@ -803,6 +819,7 @@ def emby_library_operations(config, library):
         for col in unmanaged_collections:
             library.find_assets(col)
 
+    #TODO: Metadata backup adaptation possible?
     if library.metadata_backup:
         logger.info("")
         logger.separator(f"Metadata Backup for {library.name} Library", space=False, border=False)
@@ -825,10 +842,11 @@ def emby_library_operations(config, library):
             meta = {}
         if "metadata" not in meta:
             meta["metadata"] = {}
-        items = library.get_all(load=True)
-        titles = [i.title for i in items]
+        itemList = library.get_all(load=True)
+        items = itemList.items
+        titles = [i.name for i in items]
         for i, item in enumerate(items, 1):
-            logger.ghost(f"Processing: {i}/{len(items)} {item.title}")
+            logger.ghost(f"Processing: {i}/{len(items)} {item.name}")
             map_key, attrs = library.get_locked_attributes(item, titles)
             if attrs or library.metadata_backup["add_blank_entries"]:
                 def get_dict(attrs_dict):
@@ -1655,6 +1673,12 @@ def run_collection(config, library, metadata, requested_collections):
                         items_removed = builder.sync_collection()
                         library.stats["removed"] += items_removed
                         library.status[mapping_name]["removed"] = items_removed
+                
+                if builder.favorite or builder.favorite_all:
+                    if builder.favorite_all:
+                        builder.favorite_collection(recursive=True)
+                    else:
+                        builder.favorite_collection()
 
                 if builder.do_missing and (len(builder.missing_movies) > 0 or len(builder.missing_shows) > 0):
                     radarr_add, sonarr_add = builder.run_missing()
