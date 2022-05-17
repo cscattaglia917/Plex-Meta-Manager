@@ -20,7 +20,7 @@ from xml.etree.ElementTree import ParseError
 
 logger = util.logger
 
-builders = ["emby_all", "emby_pilots", "plex_collectionless", "emby_search"]
+builders = ["emby_all", "emby_pilots", "emby_collectionless", "emby_search"]
 search_translation = {
     "episode_title": "episode.title",
     "network": "show.network",
@@ -415,6 +415,7 @@ class Emby(Library):
             logger.stacktrace()
             raise Failed("Emby Error: Emby url is invalid")
         self.Emby = None
+        self.library_id = None
         library_names = []
         library_results = embyapi.LibraryServiceApi(self.EmbyServer).get_library_mediafolders()
         #print(library_results)
@@ -423,6 +424,7 @@ class Emby(Library):
             #print("DEBUG:: s.name ==", s.name)
             if s.name == params["name"]:
                 self.Emby = s
+                self.library_id = s.id
                 break
         if not self.Emby:
             raise Failed(f"Emby Error: Emby Library '{params['name']}' not found. Options: {library_names}")
@@ -521,20 +523,14 @@ class Emby(Library):
 
     def get_all(self, collection_level=None, load=False, mapping=False):
         results = []
-        if load and collection_level in [None, "show", "artist", "movie"]:
+        if load and collection_level in [None, "Tvshows", "artist", "Movies"]:
             self._all_items = []
-        if self._all_items and collection_level in [None, "show", "artist", "movie"]:
+        if self._all_items and collection_level in [None, "Tvshows", "artist", "Movies"]:
             return self._all_items
         collection_type = collection_level if collection_level else self.type
         if not collection_level:
             collection_level = self.type
         logger.info(f"Loading All {collection_level.capitalize()} from Library: {self.name}")
-        library_id = None
-        library_results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id)
-        for s in library_results.items:
-            if s.name == self.name:
-                library_id = s.id
-                break
         #Only grab necessary fields when grabbing all items to map_guids
         if mapping:
             fields = 'ProviderIds'
@@ -545,7 +541,7 @@ class Emby(Library):
         elif collection_level == 'Tvshows':
             item_types = 'Series'
         results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    parent_id=library_id, recursive=True, include_item_types=item_types, fields=fields)
+                    parent_id=self.library_id, recursive=True, include_item_types=item_types, fields=fields)
         logger.info(f"Loaded {len(results.items)} {collection_level.capitalize()}")
         self._all_items = results
         return results
@@ -794,6 +790,86 @@ class Emby(Library):
         if len(valid_collections) == 0:
             raise Failed(f"Collection Error: No valid Plex Collections in {collections}")
         return valid_collections
+
+    def get_episode(self, item, season=None, episode=None):
+        if season and episode:
+            results = embyapi.TvShowsServiceApi(self.EmbyServer).get_shows_by_id_episodes(user_id=self.user_id,
+                    id=item.id, season=season, min_index_number=episode, limit=1)
+            if len(results.items) > 0:
+                if results.items[0].index_number == 1:
+                    return results
+                else:
+                    raise NotFound
+            else:
+                raise NotFound
+        else:
+            raise Failed("Episode Error: Season and Episode args required")
+
+    def get_emby_ids(self, method, data):
+        items = []
+        if method == "plex_all":
+            logger.info(f"Processing Plex All {data.capitalize()}s")
+            items = self.get_all(collection_level=data)
+        elif method == "emby_pilots":
+            logger.info(f"Processing Emby Pilot {data.capitalize()}s")
+            items = []
+            itemsResult = self.get_all()
+            for item in itemsResult.items:
+                try:
+                    result = self.get_episode(item, season=1, episode=1)
+                    episode = result.items[0]
+                    items.append(episode)
+                except NotFound:
+                    logger.warning(f"Emby Warning: {item.name} has no Season 1 Episode 1 ")
+        elif method == "plex_search":
+            logger.info(data[1])
+            items = self.get_filter_items(data[2])
+        elif method == "plex_collectionless":
+            good_collections = []
+            logger.info(f"Processing Plex Collectionless")
+            logger.info("Collections Excluded")
+            for col in self.get_all_collections():
+                keep_collection = True
+                for pre in data["exclude_prefix"]:
+                    if col.title.startswith(pre) or (col.titleSort and col.titleSort.startswith(pre)):
+                        keep_collection = False
+                        logger.info(f"{col.title} excluded by prefix match {pre}")
+                        break
+                if keep_collection:
+                    for ext in data["exclude"]:
+                        if col.title == ext or (col.titleSort and col.titleSort == ext):
+                            keep_collection = False
+                            logger.info(f"{col.title} excluded by exact match")
+                            break
+                if keep_collection:
+                    logger.info(f"Collection Passed: {col.title}")
+                    good_collections.append(col)
+            logger.info("")
+            logger.info("Collections Not Excluded (Items in these collections are not added to Collectionless)")
+            for col in good_collections:
+                logger.info(col.title)
+            collection_indexes = [c.index for c in good_collections]
+            all_items = self.get_all()
+            for i, item in enumerate(all_items, 1):
+                logger.ghost(f"Processing: {i}/{len(all_items)} {item.title}")
+                add_item = True
+                self.reload(item)
+                for collection in item.collections:
+                    if collection.id in collection_indexes:
+                        add_item = False
+                        break
+                if add_item:
+                    items.append(item)
+            logger.info(f"Processed {len(all_items)} {self.type}s")
+        else:
+            raise Failed(f"Plex Error: Method {method} not supported")
+        if len(items) > 0:
+            ids = [(item.id, "ratingKey") for item in items]
+            logger.debug("")
+            logger.debug(f"{len(ids)} Keys Found: {ids}")
+            return ids
+        else:
+            raise Failed("Plex Error: No Items found in Plex")
 
     def get_rating_keys(self, method, data):
         items = []

@@ -1,6 +1,8 @@
 import os, re, time
 from datetime import datetime, timedelta
 from modules import anidb, anilist, flixpatrol, icheckmovies, imdb, letterboxd, mal, plex, radarr, reciperr, sonarr, tautulli, tmdb, trakt, tvdb, mdblist, util
+from modules import emby
+import embyapi
 from modules.util import Failed, ImageData, NotScheduled, NotScheduledRange
 from PIL import Image
 from plexapi.audio import Artist, Album, Track
@@ -175,7 +177,7 @@ all_filters = boolean_filters + special_filters + \
 smart_invalid = ["collection_order", "collection_level"]
 smart_url_invalid = ["minimum_items", "filters", "run_again", "sync_mode", "show_filtered", "show_missing", "save_missing", "smart_label"] + radarr_details + sonarr_details
 custom_sort_builders = [
-    "plex_search", "plex_pilots", "tmdb_list", "tmdb_popular", "tmdb_now_playing", "tmdb_top_rated",
+    "plex_search", "plex_pilots", "emby_pilots", "tmdb_list", "tmdb_popular", "tmdb_now_playing", "tmdb_top_rated",
     "tmdb_trending_daily", "tmdb_trending_weekly", "tmdb_discover", "reciperr_list", "trakt_chart", "trakt_userlist",
     "tvdb_list", "imdb_chart", "imdb_list", "stevenlu_popular", "anidb_popular", "tmdb_upcoming", "tmdb_airing_today",
     "tmdb_on_the_air", "trakt_list", "trakt_watchlist", "trakt_collection", "trakt_trending", "trakt_popular", "trakt_boxoffice",
@@ -188,7 +190,7 @@ custom_sort_builders = [
     "mal_all", "mal_airing", "mal_upcoming", "mal_tv", "mal_movie", "mal_ova", "mal_special",
     "mal_popular", "mal_favorite", "mal_suggested", "mal_userlist", "mal_season", "mal_genre", "mal_studio"
 ]
-episode_parts_only = ["plex_pilots"]
+episode_parts_only = ["plex_pilots", "emby_pilots"]
 parts_collection_valid = [
      "filters", "plex_all", "plex_search", "trakt_list", "trakt_list_details", "collection_mode", "label", "visible_library", "limit",
      "visible_home", "visible_shared", "show_missing", "save_missing", "missing_only_released", "server_preroll", "changes_webhooks",
@@ -646,6 +648,8 @@ class CollectionBuilder:
                     self._imdb(method_name, method_data)
                 elif method_name in mal.builders:
                     self._mal(method_name, method_data)
+                elif method_name in emby.builders or method_final in emby.searches:
+                    self._emby(method_name, method_data)
                 elif method_name in plex.builders or method_final in plex.searches:
                     self._plex(method_name, method_data)
                 elif method_name in reciperr.builders:
@@ -1136,6 +1140,28 @@ class CollectionBuilder:
                     "limit": util.parse(self.Type, "limit", dict_data, datatype="int", methods=dict_methods, default=0, parent=method_name)
                 }))
 
+    def _emby(self, method_name, method_data):
+        if method_name in ["emby_all", "emby_pilots"]:
+            self.builders.append((method_name, self.collection_level))
+        elif method_name in ["emby_search", "plex_collectionless"]:
+            for dict_data in util.parse(self.Type, method_name, method_data, datatype="listdict"):
+                dict_methods = {dm.lower(): dm for dm in dict_data}
+                new_dictionary = {}
+                if method_name == "emby_search":
+                    type_override = f"{self.collection_level}s" if self.collection_level in plex.collection_level_options else None
+                    new_dictionary = self.build_filter("plex_search", dict_data, type_override=type_override)
+                elif method_name == "plex_collectionless":
+                    prefix_list = util.parse(self.Type, "exclude_prefix", dict_data, datatype="list", methods=dict_methods) if "exclude_prefix" in dict_methods else []
+                    exact_list = util.parse(self.Type, "exclude", dict_data, datatype="list", methods=dict_methods) if "exclude" in dict_methods else []
+                    if len(prefix_list) == 0 and len(exact_list) == 0:
+                        raise Failed(f"{self.Type} Error: you must have at least one exclusion")
+                    exact_list.append(self.name)
+                    new_dictionary["exclude_prefix"] = prefix_list
+                    new_dictionary["exclude"] = exact_list
+                self.builders.append((method_name, new_dictionary))
+        else:
+            self.builders.append(("plex_search", self.build_filter("plex_search", {"any": {method_name: method_data}})))
+
     def _plex(self, method_name, method_data):
         if method_name in ["plex_all", "plex_pilots"]:
             self.builders.append((method_name, self.collection_level))
@@ -1355,7 +1381,9 @@ class CollectionBuilder:
             if list_key and expired is False:
                 logger.info(f"Builder: {method} loaded from Cache")
                 return self.config.Cache.query_list_ids(list_key)
-        if "plex" in method:
+        if "emby" in method:
+            ids = self.library.get_emby_ids(method, value)
+        elif "plex" in method:
             ids = self.library.get_rating_keys(method, value)
         elif "tautulli" in method:
             ids = self.library.Tautulli.get_rating_keys(self.library, value, self.playlist)
