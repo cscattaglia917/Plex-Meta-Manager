@@ -40,8 +40,9 @@
             "program": "plex_meta_manager.py",
             "args": [
                 "--debug",
+                "-l", "TV Shows",
                 "-r",
-                "--run-collections", "Popular on Plex"
+                "--run-collections", "Pilots"
             ],
             "console": "integratedTerminal",
             "justMyCode": false

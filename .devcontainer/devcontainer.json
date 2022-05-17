@@ -44,11 +44,11 @@
 	//"forwardPorts": [],
 
 	"mounts": [
-		"source=/mnt/oasis/media/posters,target=/workspace/assets,type=bind,consistency=cached"
+		"source=/mnt/oasis/media/posters,target=/workspaces/Emby-Meta-Manager/assets,type=bind,consistency=cached"
 	],
 
-	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
-	"workspaceFolder": "/workspace"
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/Emby-Meta-Manager,type=bind",
+	"workspaceFolder": "/workspaces/Emby-Meta-Manager"
 
 	// Uncomment the next line to run commands after the container is created - for example installing curl.
 	// "postCreateCommand": "apt-get update && apt-get install -y curl",
