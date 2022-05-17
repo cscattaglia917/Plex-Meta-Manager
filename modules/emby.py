@@ -419,10 +419,8 @@ class Emby(Library):
         self.library_id = None
         library_names = []
         library_results = embyapi.LibraryServiceApi(self.EmbyServer).get_library_mediafolders()
-        #print(library_results)
         for s in library_results.items:
             library_names.append(s.name)
-            #print("DEBUG:: s.name ==", s.name)
             if s.name == params["name"]:
                 self.Emby = s
                 self.library_id = s.id
@@ -439,6 +437,7 @@ class Emby(Library):
         for user in users:
             if user.name == self.configuration.user_name: 
                 self.user_id = user.id
+                break
         
         if self.configuration.password:
             self.adminConfiguration = embyapi.Configuration()
@@ -466,6 +465,11 @@ class Emby(Library):
         self._all_items = []
         self.is_movie = self.type == "Movies"
         self.is_show = self.type == "Tvshows"
+        self.item_types = None
+        if self.is_movie:
+            self.item_types = 'Movie'
+        elif self.is_show:
+            self.item_types = 'Series'
         self.is_music = self.type == "music"
         self.is_other = self.type == "other"
         #if self.is_other and self.type == "Movie":
@@ -488,17 +492,15 @@ class Emby(Library):
         self.PlexServer.settings.save()
 
     def get_all_collections(self):
-        #fields  = self.fields
-        #fields = 'Overview,ProviderIds,ChildCount,Studios'
+        fields = 'ChildCount'
         collections = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, include_item_types='boxset')
+                    parent_id=self.library_id, recursive=True, include_item_types='BoxSet', fields=fields)
         collections = collections.items
         return collections
 
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
     def get_labeled_items(self, label):
         return self.Emby.search(label=label)
-
 
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
     def fetchItem(self, data):
@@ -507,12 +509,33 @@ class Emby(Library):
             id=data)
         return results
 
+    def get_all_favorites(self):
+        fields = self.fields
+        results = []
+        results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+                filters='IsFavorite', recursive=True, fields=fields)
+        return results
+
+    def is_favorite(self, item):
+        if item is not None:
+            favorite_status = item.user_data.is_favorite
+        else:
+            return None
+        return favorite_status
+
+    def favorite_collection(self, collection_id, collection_items=None):
+        if collection_items:
+            #if collection_items is true - favorite all items - then collection itself.
+            for item in collection_items:
+               embyapi.UserLibraryServiceApi(self.EmbyServer).post_users_by_userid_favoriteitems_by_id(user_id=self.user_id, id=item.id)
+        embyapi.UserLibraryServiceApi(self.EmbyServer).post_users_by_userid_favoriteitems_by_id(user_id=self.user_id, id=collection_id)
+
     def update_item(self, body, id):
-        itemResults = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(self.user_id, id)
         # Need to grab results for the specific item so that we include all current values in the POST request.
         # Convert both itemResults and body to dicts, then update itemDict with values from bodyDict, if the value is not null.
         # Build a new BaseItemDTO object and insert itemDict values into said object if values are not null.
         # Post newItem object with all existing data + new data.
+        itemResults = embyapi.UserLibraryServiceApi(self.EmbyAdminServer).get_users_by_userid_items_by_id(self.user_id, id)
         itemDict = itemResults.to_dict()
         bodyDict = body.to_dict()
         itemDict.update( (k,v) for k,v in bodyDict.items() if v is not None)
@@ -520,7 +543,7 @@ class Emby(Library):
         for item in itemDict:
             if itemDict[item] is not None:
                 setattr(newItem, item, itemDict[item])
-        embyapi.ItemUpdateServiceApi(self.EmbyServer).post_items_by_itemid(newItem, id)
+        embyapi.ItemUpdateServiceApi(self.EmbyAdminServer).post_items_by_itemid(newItem, id)
 
     def get_all(self, collection_level=None, load=False, mapping=False):
         results = []
@@ -537,12 +560,8 @@ class Emby(Library):
             fields = 'ProviderIds'
         else:
             fields = 'ProviderIds'
-        if collection_level == 'Movies':
-            item_types = 'Movie'
-        elif collection_level == 'Tvshows':
-            item_types = 'Series'
-        results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    parent_id=self.library_id, recursive=True, include_item_types=item_types, fields=fields)
+        results = embyapi.ItemsServiceApi(self.EmbyAdminServer).get_users_by_userid_items(user_id=self.user_id,
+                    parent_id=self.library_id, recursive=True, include_item_types=self.item_types, fields=fields)
         logger.info(f"Loaded {len(results.items)} {collection_level.capitalize()}")
         self._all_items = results
         return results
@@ -976,8 +995,6 @@ class Emby(Library):
         return name, collection_id, collection_items
 
     def get_collection_id(self, collection):
-        #fields = self.fields
-        #fields = 'ProviderIds,SortName'
         if collection:
             collections = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
                 recursive=True, search_term=collection, include_item_types='boxset')
@@ -1014,10 +1031,10 @@ class Emby(Library):
         elif libtype == 'Movies':
             if title and not year:
                 results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, search_term=title, include_item_types='Movie')
+                    recursive=True, search_term=title, include_item_types=self.item_types)
             if title and year:
                 results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                    recursive=True, search_term=title, years=year, include_item_types='Movie')
+                    recursive=True, search_term=title, years=year, include_item_types=self.item_types)
         return results
 
     def search_item(self, data, year=None):
