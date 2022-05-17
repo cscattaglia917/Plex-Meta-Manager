@@ -3,6 +3,7 @@ import os, plexapi, requests, embyapi
 from datetime import datetime
 from embyapi import ApiClient
 from embyapi import Configuration
+from embyapi.rest import ApiException
 from modules import builder, util
 from modules.library import Library
 from modules.util import Failed, ImageData
@@ -401,7 +402,7 @@ class Emby(Library):
         if params["emby"]["password"] != None:
             self.configuration.password = params["emby"]["password"]
         #self.configuration.debug = True
-        self.log_dir = os.path.join('/workspace/config', LOG_DIR)
+        self.log_dir = os.path.join('/workspaces/Emby-Meta-Manager/config', LOG_DIR)
         self.configuration.logger_file = os.path.join(self.log_dir, DEBUG_LOG)
         logger.secret(self.configuration.host)
         logger.secret(self.configuration.api_key['api_key'])
@@ -692,8 +693,11 @@ class Emby(Library):
             embyapi.CollectionServiceApi(self.EmbyServer).post_collections(name=collection, ids=item)
 
     def delete_collection(self, collection):
-        embyapi.LibraryServiceApi(self.EmbyAdminServer).delete_items_by_id(collection.id)
-
+        try:
+            embyapi.LibraryServiceApi(self.EmbyAdminServer).delete_items_by_id(collection.id)
+        except ApiException as e:
+            logger.error("Error while deleting collection %s", e)
+            
     def alter_collection(self, collection_id, item, smart_label_collection=False, add=True):
         #TODO: Wrap in try/catch/except
         if isinstance(item, list):
