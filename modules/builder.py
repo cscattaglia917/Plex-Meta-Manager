@@ -2,7 +2,6 @@ import os, re, time
 from datetime import datetime, timedelta
 from modules import anidb, anilist, flixpatrol, icheckmovies, imdb, letterboxd, mal, plex, radarr, reciperr, sonarr, tautulli, tmdb, trakt, tvdb, mdblist, util
 from modules import emby
-import embyapi
 from modules.util import Failed, ImageData, NotScheduled, NotScheduledRange
 from PIL import Image
 from plexapi.audio import Artist, Album, Track
