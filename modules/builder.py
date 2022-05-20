@@ -53,11 +53,12 @@ method_alias = {
 filter_translation = {
     "record_label": "studio",
     "actor": "actors",
-    "audience_rating": "audienceRating",
+    "audience_rating": "community_rating",
     "collection": "collections",
-    "content_rating": "contentRating",
+    "content_rating": "official_rating",
+    "year": "production_year",
     "country": "countries",
-    "critic_rating": "rating",
+    "critic_rating": "critic_rating",
     "director": "directors",
     "genre": "genres",
     "label": "labels",
@@ -72,7 +73,7 @@ filter_translation = {
     "style": "styles"
 }
 modifier_alias = {".greater": ".gt", ".less": ".lt"}
-all_builders = anidb.builders + anilist.builders + flixpatrol.builders + icheckmovies.builders + imdb.builders + \
+all_builders = anidb.builders + anilist.builders + emby.builders + flixpatrol.builders + icheckmovies.builders + imdb.builders + \
                letterboxd.builders + mal.builders + plex.builders + reciperr.builders + tautulli.builders + \
                tmdb.builders + trakt.builders + tvdb.builders + mdblist.builders
 show_only_builders = [
@@ -1153,8 +1154,9 @@ class CollectionBuilder:
                 dict_methods = {dm.lower(): dm for dm in dict_data}
                 new_dictionary = {}
                 if method_name == "emby_search":
-                    type_override = f"{self.collection_level}s" if self.collection_level in plex.collection_level_options else None
-                    new_dictionary = self.build_filter("plex_search", dict_data, type_override=type_override)
+                    type_override = f"{self.collection_level}s" if self.collection_level in emby.collection_level_options else None
+                    new_dictionary = dict(dict_data)
+                    #new_dictionary = self.build_emby_filter("emby_search", dict_data, type_override=type_override)
                 elif method_name == "plex_collectionless":
                     prefix_list = util.parse(self.Type, "exclude_prefix", dict_data, datatype="list", methods=dict_methods) if "exclude_prefix" in dict_methods else []
                     exact_list = util.parse(self.Type, "exclude", dict_data, datatype="list", methods=dict_methods) if "exclude" in dict_methods else []
@@ -1604,6 +1606,192 @@ class CollectionBuilder:
                         if self.details["show_filtered"] is True:
                             logger.info(f"{name} {self.Type} | X | {current_title}")
 
+    def build_emby_filter(self, method, emby_filter, display=False, default_sort="title.asc", type_override=None):
+        if display:
+            logger.info("")
+            logger.info(f"Validating Method: {method}")
+        if emby_filter is None:
+            raise Failed(f"{self.Type} Error: {method} attribute is blank")
+        if not isinstance(emby_filter, dict):
+            raise Failed(f"{self.Type} Error: {method} must be a dictionary: {emby_filter}")
+        if display:
+            logger.debug(f"Value: {emby_filter}")
+
+        filter_alias = {m.lower(): m for m in emby_filter}
+
+        if "any" in filter_alias and "all" in filter_alias:
+            raise Failed(f"{self.Type} Error: Cannot have more then one base")
+
+        if type_override:
+            sort_type = type_override
+        elif "type" in filter_alias and self.library.is_show:
+            if emby_filter[filter_alias["type"]] not in ["shows", "seasons", "episodes"]:
+                raise Failed(f"{self.Type} Error: type: {emby_filter[filter_alias['type']]} is invalid, must be either shows, season, or episodes")
+            sort_type = emby_filter[filter_alias["type"]]
+        elif "type" in filter_alias and self.library.is_music:
+            if emby_filter[filter_alias["type"]] not in ["artists", "albums", "tracks"]:
+                raise Failed(f"{self.Type} Error: type: {emby_filter[filter_alias['type']]} is invalid, must be either artists, albums, or tracks")
+            sort_type = emby_filter[filter_alias["type"]]
+        elif self.library.is_show:
+            sort_type = "shows"
+        elif self.library.is_music:
+            sort_type = "artists"
+        else:
+            sort_type = "movies"
+        ms = method.split("_")
+        filter_details = f"{ms[0].capitalize()} {sort_type.capitalize()[:-1]} {ms[1].capitalize()}\n"
+        type_key, sorts = plex.sort_types[sort_type]
+
+        sort = default_sort
+        if "sort_by" in filter_alias:
+            if emby_filter[filter_alias["sort_by"]] is None:
+                raise Failed(f"{self.Type} Error: sort_by attribute is blank")
+            if emby_filter[filter_alias["sort_by"]] not in sorts:
+                raise Failed(f"{self.Type} Error: sort_by: {emby_filter[filter_alias['sort_by']]} is invalid")
+            sort = emby_filter[filter_alias["sort_by"]]
+        filter_details += f"Sort By: {sort}\n"
+
+        limit = None
+        if "limit" in filter_alias:
+            if emby_filter[filter_alias["limit"]] is None:
+                raise Failed(f"{self.Type} Error: limit attribute is blank")
+            elif str(emby_filter[filter_alias["limit"]]).lower() == "all":
+                filter_details += "Limit: all\n"
+            elif not isinstance(emby_filter[filter_alias["limit"]], int) or emby_filter[filter_alias["limit"]] < 1:
+                raise Failed(f"{self.Type} Error: limit attribute must be an integer greater then 0")
+            else:
+                limit = emby_filter[filter_alias["limit"]]
+                filter_details += f"Limit: {limit}\n"
+
+        validate = True
+        if "validate" in filter_alias:
+            if emby_filter[filter_alias["validate"]] is None:
+                raise Failed(f"{self.Type} Error: validate attribute is blank")
+            if not isinstance(emby_filter[filter_alias["validate"]], bool):
+                raise Failed(f"{self.Type} Error: validate attribute must be either true or false")
+            validate = emby_filter[filter_alias["validate"]]
+            filter_details += f"Validate: {validate}\n"
+
+        def _filter(filter_dict, is_all=True, level=1):
+            output = ""
+            display_out = f"\n{'  ' * level}Match {'all' if is_all else 'any'} of the following:"
+            level += 1
+            indent = f"\n{'  ' * level}"
+            conjunction = f"{'and' if is_all else 'or'}=1&"
+            for _key, _data in filter_dict.items():
+                attr, modifier, final_attr = self._split(_key)
+
+                def build_url_arg(arg, mod=None, arg_s=None, mod_s=None):
+                    arg_key = plex.search_translation[attr] if attr in plex.search_translation else attr
+                    arg_key = plex.show_translation[arg_key] if self.library.is_show and arg_key in plex.show_translation else arg_key
+                    if mod is None:
+                        mod = plex.modifier_translation[modifier] if modifier in plex.modifier_translation else modifier
+                    if arg_s is None:
+                        arg_s = arg
+                    if attr in plex.string_attributes and modifier in ["", ".not"]:
+                        mod_s = "does not contain" if modifier == ".not" else "contains"
+                    elif mod_s is None:
+                        mod_s = util.mod_displays[modifier]
+                    param_s = plex.search_display[attr] if attr in plex.search_display else attr.title().replace('_', ' ')
+                    display_line = f"{indent}{param_s} {mod_s} {arg_s}"
+                    return f"{arg_key}{mod}={arg}&", display_line
+
+                error = None
+                if final_attr not in plex.searches and not final_attr.startswith(("any", "all")):
+                    error = f"{self.Type} Error: {final_attr} is not a valid {method} attribute"
+                elif self.library.is_show and final_attr in plex.movie_only_searches:
+                    error = f"{self.Type} Error: {final_attr} {method} attribute only works for movie libraries"
+                elif self.library.is_movie and final_attr in plex.show_only_searches:
+                    error = f"{self.Type} Error: {final_attr} {method} attribute only works for show libraries"
+                elif self.library.is_music and final_attr not in plex.music_searches + ["all", "any"]:
+                    error = f"{self.Type} Error: {final_attr} {method} attribute does not work for music libraries"
+                elif not self.library.is_music and final_attr in plex.music_searches:
+                    error = f"{self.Type} Error: {final_attr} {method} attribute only works for music libraries"
+                elif _data is not False and not _data:
+                    error = f"{self.Type} Error: {final_attr} {method} attribute is blank"
+                else:
+                    if final_attr.startswith(("any", "all")):
+                        dicts = util.get_list(_data)
+                        results = ""
+                        display_add = ""
+                        for dict_data in dicts:
+                            if not isinstance(dict_data, dict):
+                                raise Failed(f"{self.Type} Error: {attr} must be either a dictionary or list of dictionaries")
+                            inside_filter, inside_display = _filter(dict_data, is_all=attr == "all", level=level)
+                            if len(inside_filter) > 0:
+                                display_add += inside_display
+                                results += f"{conjunction if len(results) > 0 else ''}push=1&{inside_filter}pop=1&"
+                    else:
+                        validation = self.validate_attribute(attr, modifier, final_attr, _data, validate, pairs=True)
+                        if validation is not False and not validation:
+                            continue
+                        elif attr in plex.date_attributes and modifier in ["", ".not"]:
+                            last_text = "is not in the last" if modifier == ".not" else "is in the last"
+                            last_mod = "%3E%3E" if modifier == "" else "%3C%3C"
+                            results, display_add = build_url_arg(f"-{validation}d", mod=last_mod, arg_s=f"{validation} Days", mod_s=last_text)
+                        elif attr == "duration" and modifier in [".gt", ".gte", ".lt", ".lte"]:
+                            results, display_add = build_url_arg(validation * 60000)
+                        elif attr in plex.boolean_attributes:
+                            bool_mod = "" if validation else "!"
+                            bool_arg = "true" if validation else "false"
+                            results, display_add = build_url_arg(1, mod=bool_mod, arg_s=bool_arg, mod_s="is")
+                        elif (attr in plex.tag_attributes + plex.string_attributes + plex.year_attributes) and modifier in ["", ".is", ".isnot", ".not", ".begins", ".ends"]:
+                            results = ""
+                            display_add = ""
+                            #Here might be where I need to "build" the filter from validation?
+
+                            for og_value, result in validation:
+                                built_arg = build_url_arg(quote(str(result)) if attr in plex.string_attributes else result, arg_s=og_value)
+                                display_add += built_arg[1]
+                                results += f"{conjunction if len(results) > 0 else ''}{built_arg[0]}"
+                        else:
+                            results, display_add = build_url_arg(validation)
+                    display_out += display_add
+                    output += f"{conjunction if len(output) > 0 else ''}{results}"
+                if error:
+                    if validate:
+                        raise Failed(error)
+                    else:
+                        logger.error(error)
+                        continue
+            return output, display_out
+
+        if "any" not in filter_alias and "all" not in filter_alias:
+            base_dict = {}
+            any_dicts = []
+            for alias_key, alias_value in filter_alias.items():
+                _, _, final = self._split(alias_key)
+                if final in plex.and_searches:
+                    base_dict[alias_value[:-4]] = emby_filter[alias_value]
+                elif final in plex.or_searches:
+                    any_dicts.append({alias_value: emby_filter[alias_value]})
+                elif final in plex.searches:
+                    base_dict[alias_value] = emby_filter[alias_value]
+            if len(any_dicts) > 0:
+                base_dict["any"] = any_dicts
+            base_all = True
+            if len(base_dict) == 0:
+                raise Failed(f"{self.Type} Error: Must have either any or all as a base for {method}")
+        else:
+            base = "all" if "all" in filter_alias else "any"
+            base_all = base == "all"
+            if emby_filter[filter_alias[base]] is None:
+                raise Failed(f"{self.Type} Error: {base} attribute is blank")
+            if not isinstance(emby_filter[filter_alias[base]], dict):
+                raise Failed(f"{self.Type} Error: {base} must be a dictionary: {emby_filter[filter_alias[base]]}")
+            base_dict = emby_filter[filter_alias[base]]
+        built_filter, filter_text = _filter(base_dict, is_all=base_all)
+        #This might be where I should build my "filter" for Emby
+        filter_details = f"{filter_details}Filter:{filter_text}"
+        if len(built_filter) > 0:
+            final_filter = built_filter[:-1] if base_all else f"push=1&{built_filter}pop=1"
+            filter_url = f"?type={type_key}&{f'limit={limit}&' if limit else ''}sort={sorts[sort]}&{final_filter}"
+        else:
+            raise Failed(f"{self.Type} Error: No Filter Created")
+
+        return type_key, filter_details, filter_url
+
+
     def build_filter(self, method, plex_filter, display=False, default_sort="title.asc", type_override=None):
         if display:
             logger.info("")
@@ -1835,7 +2023,12 @@ class CollectionBuilder:
             else:
                 final_values = util.get_list(data)
             use_title = not pairs
-            search_choices, names = self.library.get_search_choices(attribute, title=use_title)
+            if isinstance(self.library, emby.Emby):
+                return True
+                #search_choices = self.library.get_search_choices(attribute, data, title=use_title)
+                #return search_choices
+            elif isinstance(self.library, plex.Plex):
+                search_choices, names = self.library.get_search_choices(attribute, title=use_title)
             valid_list = []
             for value in final_values:
                 if str(value).lower() in search_choices:
@@ -2079,20 +2272,20 @@ class CollectionBuilder:
 
     def check_filters(self, item, display):
         if (self.filters or self.tmdb_filters) and not self.details["only_filter_missing"]:
-            logger.ghost(f"Filtering {display} {item.title}")
+            logger.ghost(f"Filtering {display} {item.name}")
             if self.tmdb_filters and isinstance(item, (Movie, Show)):
-                if item.ratingKey not in self.library.movie_rating_key_map and item.ratingKey not in self.library.show_rating_key_map:
-                    logger.warning(f"Filter Error: No {'TMDb' if self.library.is_movie else 'TVDb'} ID found for {item.title}")
+                if item.id not in self.library.movie_rating_key_map and item.id not in self.library.show_rating_key_map:
+                    logger.warning(f"Filter Error: No {'TMDb' if self.library.is_movie else 'TVDb'} ID found for {item.name}")
                     return False
                 try:
-                    if item.ratingKey in self.library.movie_rating_key_map:
-                        t_id = self.library.movie_rating_key_map[item.ratingKey]
+                    if item.id in self.library.movie_rating_key_map:
+                        t_id = self.library.movie_rating_key_map[item.id]
                     else:
-                        t_id = self.library.show_rating_key_map[item.ratingKey]
+                        t_id = self.library.show_rating_key_map[item.id]
                 except Failed as e:
                     logger.error(e)
                     return False
-                if not self.check_tmdb_filter(t_id, item.ratingKey in self.library.movie_rating_key_map):
+                if not self.check_tmdb_filter(t_id, item.id in self.library.movie_rating_key_map):
                     return False
             for filter_method, filter_data in self.filters:
                 filter_attr, modifier, filter_final = self._split(filter_method)
@@ -2170,7 +2363,13 @@ class CollectionBuilder:
                             return False
                 elif modifier in [".gt", ".gte", ".lt", ".lte", ".count_gt", ".count_gte", ".count_lt", ".count_lte"]:
                     divider = 60000 if filter_attr == "duration" else 1
+                    #Necessary changes to critic_rating for Emby ratings
+                    critic_adjust = 10 if filter_attr == "critic_rating" and isinstance(self.library, emby.Emby) else 1
                     test_number = getattr(item, filter_actual)
+                    if test_number is not None:
+                        if critic_adjust == 10 and test_number > 10:
+                            test_number /= critic_adjust
+                            # Divide critic_rating by 10 to get a value from 0-10
                     if modifier in [".count_gt", ".count_gte", ".count_lt", ".count_lte"]:
                         test_number = len(test_number) if test_number else 0
                         modifier = f".{modifier[7:]}"
@@ -2196,7 +2395,7 @@ class CollectionBuilder:
                     if (not list(set(filter_data) & set(attrs)) and modifier == "") \
                             or (list(set(filter_data) & set(attrs)) and modifier == ".not"):
                         return False
-            logger.ghost(f"Filtering {display} {item.title}")
+            logger.ghost(f"Filtering {display} {item.name}")
         return True
 
     def run_missing(self):
