@@ -2699,6 +2699,7 @@ class CollectionBuilder:
             #if "sort_title" in self.details and str(self.details["sort_title"]) != str(self.obj.sort_name):
                 self.obj.forced_sort_name = self.details["sort_title"]
                 self.obj.sort_name = self.details["sort_title"]
+                self.obj.locked_fields.append('SortName')
                 batch_display += f"\nSort Title | {self.details['sort_title']}"
 
             if "collection_order" in self.details:

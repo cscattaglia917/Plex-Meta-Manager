@@ -1,0 +1,16 @@
+For multi-genre:
+    - all (and equivalent):
+        - Do one API call with all genres specified.
+        - Fitler through this list.
+        - For item in list
+            if item[genres] contains all genres specified, add to a new list.
+        - Return new list.
+    - any (or equivalent):
+        - Do one API call with all genres specified.
+        - Return this list.
+
+
+Tracing through emby filter.
+run_collection() in plex_meta_manager.py initializes the builder class from the config file, etc.
+Builder __init__ calls _emby to initialize emby builder.
+_emby then calls build_emby_filter

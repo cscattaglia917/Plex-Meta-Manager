@@ -26,9 +26,10 @@ builders = ["emby_all", "emby_pilots", "emby_collectionless", "emby_search"]
 search_translation = {
     # "episode_title": "episode.title",
     "network": "show.network",
-    "critic_rating": "rating",
-    "audience_rating": "audienceRating",
-    "user_rating": "userRating",
+    "critic_rating": "critic_rating",
+    "rating": "critic_rating",
+    "audience_rating": "community_rating",
+    "user_rating": "user_rating",
     "episode_user_rating": "episode.userRating",
     "content_rating": "contentRating",
     "episode_year": "episode.year",
@@ -832,9 +833,12 @@ class Emby(Library):
         if season and episode:
             results = embyapi.TvShowsServiceApi(self.EmbyServer).get_shows_by_id_episodes(user_id=self.user_id,
                     id=item.id, season=season, min_index_number=episode, limit=1)
-            if len(results.items) > 0:
-                if results.items[0].index_number == 1:
-                    return results
+            if (results != None):
+                if len(results.items) > 0:
+                    if results.items[0].index_number == 1:
+                        return results
+                    else:
+                        raise NotFound
                 else:
                     raise NotFound
             else:
@@ -1023,24 +1027,50 @@ class Emby(Library):
 
     def get_filter_items(self, data):
         itemList = []
+        results = None
+        genresPulled = False
         for key in data:
             if key == 'all':
                 filters = list(data[key].items())
                 for f in filters:
                     _filter = f[0]
                     _value = f[1]
-                    if _filter == 'genre':
-                        fields = 'Genres'
-                        genres = re.sub(',', '|', _value)
-                        results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
-                            parent_id=self.library_id, recursive=True, include_item_types=self.item_types, genres=genres, fields=fields)
-                        #EmbyAPI returns movies with any of those genres - need to filter it down.
-                    
-                    for item in results.items:
-                        if item.genres is not None:
-                            split_genres = genres.split('|')
-                            if all(x in item.genres for x in split_genres):
-                                itemList.append(item)
+                    if _filter.startswith('genre'):
+                        if _filter.find('.') != -1:
+                            fs = _filter.split('.')
+                            _filter = fs[0]
+                            _mod = fs[1]
+                        else:
+                            fields = 'Genres'
+                            genres = re.sub(',', '|', _value)
+                            #If genres contains a pipe, we have multiple genres and we need to search and
+                            #filter itemList down to only include movies with ALL supplied genres.
+                            #otherwise we will continue iterating through filters and "building" our URL.
+                            if genres.find('|') != -1:
+                                results.append(embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+                                    parent_id=self.library_id, recursive=True, include_item_types=self.item_types, genres=genres, fields=fields))
+                                #EmbyAPI returns movies with any of those genres - need to filter it down.
+                                for item in results.items:
+                                    if item.genres is not None:
+                                        split_genres = genres.split('|')
+                                        if all(x in item.genres for x in split_genres):
+                                            itemList.append(item)
+                                genresPulled = True
+                    elif _filter.startswith('rating'):
+                        if _filter.find('.') != -1:
+                            fs = _filter.split('.')
+                            _filter = fs[0]
+                            _mod = fs[1]
+                            if _mod == 'gte':
+                                min_critic_rating = _value
+                            elif _mod == 'lte':
+                                print("Not sure what next steps are.")
+                                
+
+                if genresPulled == False:
+                    print("Need to pull genres still.")
+            elif key == 'any':
+                filters = list(data[key].items())
         return itemList
 
     def get_tmdb_from_map(self, item):
