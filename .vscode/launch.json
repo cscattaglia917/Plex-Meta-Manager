@@ -34,15 +34,29 @@
             "justMyCode": false
         },
         {
+            "name": "Production Run",
+            "type": "python",
+            "request": "launch",
+            "program": "plex_meta_manager.py",
+            "args": [
+                "--debug",
+                "-c", "config/config.production.yml",
+                "-r"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "PMM -rc",
             "type": "python",
             "request": "launch",
             "program": "plex_meta_manager.py",
             "args": [
                 "--debug",
-                "-l", "TV Shows",
                 "-r",
-                "--run-collections", "Pilots"
+                "-l", "TV Shows",
+                "-c", "config/config.production.yml",
+                "--run-collections", "Christmas"
             ],
             "console": "integratedTerminal",
             "justMyCode": false

@@ -155,10 +155,10 @@ class TVDb:
         if tvdb_url.startswith((urls["list"], urls["alt_list"])):
             try:
                 response = self.config.get_html(tvdb_url, headers=util.header(self.tvdb_language))
-                items = response.xpath("//div[@class='col-xs-12 col-sm-12 col-md-8 col-lg-8 col-md-pull-4']/div[@class='row']")
+                items = response.xpath("//div[@class='row']/div/div[@class='row']/div/h3/a")
                 for item in items:
-                    title = item.xpath(".//div[@class='col-xs-12 col-sm-9 mt-2']//a/text()")[0]
-                    item_url = item.xpath(".//div[@class='col-xs-12 col-sm-9 mt-2']//a/@href")[0]
+                    title = item.xpath("text()")[0]
+                    item_url = item.xpath("@href")[0]
                     if item_url.startswith("/series/"):
                         try:
                             ids.append((self.get_series(f"{base_url}{item_url}").id, "tvdb"))

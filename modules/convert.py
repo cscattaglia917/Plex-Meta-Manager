@@ -207,6 +207,7 @@ class Convert:
     def get_id(self, item, library):
         expired = None
         tmdb_id = []
+        tmdb_id_v2 = []
         tvdb_id = []
         imdb_id = []
         anidb_id = None
@@ -233,11 +234,14 @@ class Convert:
                 return media_id_type, cache_id, imdb_check
 
         try:
+            i = 1
             for provider_id in item.provider_ids:
+                i += 1
                 if provider_id.lower() == 'imdb':
                     imdb_id.append(item.provider_ids[provider_id])
                 if provider_id.lower() == 'tmdb':
-                    tmdb_id.append(int(item.provider_ids[provider_id]))
+                    id_to_add = re.findall('\d+',item.provider_ids[provider_id])[0] #Some results need to be filtered in order to remove unwanted values. ex: 105248-cyberpunk-edgerunners
+                    tmdb_id.append(id_to_add)
 
             if not tmdb_id and imdb_id:
                 for imdb in imdb_id:

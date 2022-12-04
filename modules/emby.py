@@ -1,5 +1,6 @@
 import base64
 import os, plexapi, requests, embyapi
+import re
 from datetime import datetime
 from embyapi import ApiClient
 from embyapi import Configuration
@@ -23,11 +24,12 @@ logger = util.logger
 
 builders = ["emby_all", "emby_pilots", "emby_collectionless", "emby_search"]
 search_translation = {
-    "episode_title": "episode.title",
+    # "episode_title": "episode.title",
     "network": "show.network",
-    "critic_rating": "rating",
-    "audience_rating": "audienceRating",
-    "user_rating": "userRating",
+    "critic_rating": "critic_rating",
+    "rating": "critic_rating",
+    "audience_rating": "community_rating",
+    "user_rating": "user_rating",
     "episode_user_rating": "episode.userRating",
     "content_rating": "contentRating",
     "episode_year": "episode.year",
@@ -547,9 +549,9 @@ class Emby(Library):
 
     def get_all(self, collection_level=None, load=False, mapping=False):
         results = []
-        if load and collection_level in [None, "Tvshows", "artist", "Movies"]:
+        if load and collection_level in [None, "Tvshows", "artist", "Movies", "movie"]:
             self._all_items = []
-        if self._all_items and collection_level in [None, "Tvshows", "artist", "Movies"]:
+        if self._all_items and collection_level in [None, "Tvshows", "artist", "Movies", "movie"]:
             return self._all_items
         collection_type = collection_level if collection_level else self.type
         if not collection_level:
@@ -575,7 +577,13 @@ class Emby(Library):
 
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
     def create_playlist(self, name, items):
-        return self.PlexServer.createPlaylist(name, items=items)
+        if isinstance(items, list):
+            id_string = ''
+            for i in items:
+                id_string += i.id + ','
+            return embyapi.PlaylistServiceApi(self.EmbyServer).post_playlists(name=name, ids=id_string)
+        elif isinstance(items, int):
+            return embyapi.PlaylistServiceApi(self.EmbyServer).post_playlists(name=name, ids=items)
 
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
     def fetchItems(self, key, container_start, container_size):
@@ -615,7 +623,7 @@ class Emby(Library):
         try:
             results = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(self.user_id, item.id)
             return results
-        except (BadRequest, NotFound) as e:
+        except ApiException as e:
             logger.stacktrace()
             raise Failed(f"Item Failed to Load: {e}")
 
@@ -660,13 +668,20 @@ class Emby(Library):
         self.reload(item)
 
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_failed)
-    def get_search_choices(self, search_name, title=True):
+    def get_search_choices(self, search_name, data, title=True):
         final_search = search_translation[search_name] if search_name in search_translation else search_name
         final_search = show_translation[final_search] if self.is_show and final_search in show_translation else final_search
         try:
             names = []
             choices = {}
             use_title = title and final_search not in ["contentRating", "audioLanguage", "subtitleLanguage", "resolution"]
+            resultsList = None
+            if final_search == 'genre':
+                fields = 'Genres'
+                genres = re.sub(',', '|', data)
+                resultsList = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+                            parent_id=self.library_id, recursive=True, include_item_types=self.item_types, genres=genres, fields=fields)
+                return resultsList.items
             for choice in self.Plex.listFilterChoices(final_search):
                 if choice.title not in names:
                     names.append(choice.title)
@@ -708,7 +723,7 @@ class Emby(Library):
             for i in item:
                 id_string += i.id + ','
             embyapi.CollectionServiceApi(self.EmbyServer).post_collections(name=collection, ids=id_string)
-        if isinstance(item, int):
+        elif isinstance(item, int):
             embyapi.CollectionServiceApi(self.EmbyServer).post_collections(name=collection, ids=item)
 
     def delete_collection(self, collection):
@@ -818,9 +833,12 @@ class Emby(Library):
         if season and episode:
             results = embyapi.TvShowsServiceApi(self.EmbyServer).get_shows_by_id_episodes(user_id=self.user_id,
                     id=item.id, season=season, min_index_number=episode, limit=1)
-            if len(results.items) > 0:
-                if results.items[0].index_number == 1:
-                    return results
+            if (results != None):
+                if len(results.items) > 0:
+                    if results.items[0].index_number == 1:
+                        return results
+                    else:
+                        raise NotFound
                 else:
                     raise NotFound
             else:
@@ -830,9 +848,10 @@ class Emby(Library):
 
     def get_emby_ids(self, method, data):
         items = []
-        if method == "plex_all":
-            logger.info(f"Processing Plex All {data.capitalize()}s")
-            items = self.get_all(collection_level=data)
+        if method == "emby_all":
+            logger.info(f"Processing Emby All {data.capitalize()}s")
+            itemsResult = self.get_all(collection_level=data)
+            items = itemsResult.items
         elif method == "emby_pilots":
             logger.info(f"Processing Emby Pilot {data.capitalize()}s")
             items = []
@@ -844,9 +863,9 @@ class Emby(Library):
                     items.append(episode)
                 except NotFound:
                     logger.warning(f"Emby Warning: {item.name} has no Season 1 Episode 1 ")
-        elif method == "plex_search":
-            logger.info(data[1])
-            items = self.get_filter_items(data[2])
+        elif method == "emby_search":
+            logger.info(data)
+            items = self.get_filter_items(data)
         elif method == "plex_collectionless":
             good_collections = []
             logger.info(f"Processing Plex Collectionless")
@@ -1006,10 +1025,53 @@ class Emby(Library):
             raise Failed("Emby Error: Unable to find Collection ID")
 
 
-    def get_filter_items(self, uri_args):
-        key = f"/library/sections/{self.Plex.key}/all{uri_args}"
-        logger.debug(key)
-        return self.Plex._search(key, None, 0, plexapi.X_PLEX_CONTAINER_SIZE)
+    def get_filter_items(self, data):
+        itemList = []
+        results = None
+        genresPulled = False
+        for key in data:
+            if key == 'all':
+                filters = list(data[key].items())
+                for f in filters:
+                    _filter = f[0]
+                    _value = f[1]
+                    if _filter.startswith('genre'):
+                        if _filter.find('.') != -1:
+                            fs = _filter.split('.')
+                            _filter = fs[0]
+                            _mod = fs[1]
+                        else:
+                            fields = 'Genres'
+                            genres = re.sub(',', '|', _value)
+                            #If genres contains a pipe, we have multiple genres and we need to search and
+                            #filter itemList down to only include movies with ALL supplied genres.
+                            #otherwise we will continue iterating through filters and "building" our URL.
+                            if genres.find('|') != -1:
+                                results.append(embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
+                                    parent_id=self.library_id, recursive=True, include_item_types=self.item_types, genres=genres, fields=fields))
+                                #EmbyAPI returns movies with any of those genres - need to filter it down.
+                                for item in results.items:
+                                    if item.genres is not None:
+                                        split_genres = genres.split('|')
+                                        if all(x in item.genres for x in split_genres):
+                                            itemList.append(item)
+                                genresPulled = True
+                    elif _filter.startswith('rating'):
+                        if _filter.find('.') != -1:
+                            fs = _filter.split('.')
+                            _filter = fs[0]
+                            _mod = fs[1]
+                            if _mod == 'gte':
+                                min_critic_rating = _value
+                            elif _mod == 'lte':
+                                print("Not sure what next steps are.")
+                                
+
+                if genresPulled == False:
+                    print("Need to pull genres still.")
+            elif key == 'any':
+                filters = list(data[key].items())
+        return itemList
 
     def get_tmdb_from_map(self, item):
         return self.movie_rating_key_map[item.id] if item.id in self.movie_rating_key_map else None
