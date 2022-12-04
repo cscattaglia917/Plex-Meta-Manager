@@ -47,14 +47,13 @@
             "justMyCode": false
         },
         {
-            "name": "PMM -rc",
+            "name": "Christmas",
             "type": "python",
             "request": "launch",
             "program": "plex_meta_manager.py",
             "args": [
                 "--debug",
                 "-r",
-                "-l", "TV Shows",
                 "-c", "config/config.production.yml",
                 "--run-collections", "Christmas"
             ],
