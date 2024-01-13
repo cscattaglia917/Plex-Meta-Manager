@@ -553,7 +553,7 @@ class ConfigFile:
                 except Failed as e:
                     logger.error(e)
 
-            self.TVDb = TVDb(self, self.general["tvdb_language"])
+            self.TVDb = TVDb(self, self.general["tvdb_language"], self.general["cache_expiration"])
             self.IMDb = IMDb(self)
             self.Convert = Convert(self)
             self.AniList = AniList(self)

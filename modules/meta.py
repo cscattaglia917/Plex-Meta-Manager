@@ -635,7 +635,8 @@ class MetadataFile(DataFile):
                                 final_value = value
                             if current != str(final_value):
                                 if key == "title":
-                                    current_item.editTitle(final_value)
+                                    current_item.Name = final_value
+                                    #current_item.editTitle(final_value)
                                 else:
                                     current_item.editField(key, final_value)
                                 logger.info(f"Detail: {name} updated to {final_value}")
@@ -737,9 +738,16 @@ class MetadataFile(DataFile):
                 summary = tmdb_item.overview
                 genres = tmdb_item.genres
 
-            item.batchEdits()
+            #item.batchEdits()
+            #This is where I need to "get" the full item and return it back to Emby with appropriate sort title and locked fields settings.
+            #Slowly build this out one metadata update at a time.
+
+            #need to get the FULL item here!
+            
+            #item = self.library.update_item()
+
             add_edit("title", item, meta, methods, value=title)
-            add_edit("sort_title", item, meta, methods, key="titleSort")
+            add_edit("sort_title", item, meta, methods, key="sort_name")
             add_edit("user_rating", item, meta, methods, key="userRating", var_type="float")
             if not self.library.is_music:
                 add_edit("originally_available", item, meta, methods, key="originallyAvailableAt", value=originally_available, var_type="date")
@@ -991,7 +999,7 @@ class MetadataFile(DataFile):
                 races = self.config.Ergast.get_races(f1_season, f1_language)
                 race_lookup = {r.round: r for r in races}
                 for season in item.seasons():
-                    if season.seasonNumber is 0:
+                    if season.seasonNumber == 0:
                         continue
                     sprint_weekend = False
                     for episode in season.episodes():

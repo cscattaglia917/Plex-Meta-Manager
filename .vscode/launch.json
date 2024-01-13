@@ -41,13 +41,14 @@
             "args": [
                 "--debug",
                 "-c", "config/config.production.yml",
-                "-r"
+                "-r",
+                "-lo"
             ],
             "console": "integratedTerminal",
             "justMyCode": false
         },
         {
-            "name": "Christmas",
+            "name": "One-Off Collection",
             "type": "python",
             "request": "launch",
             "program": "plex_meta_manager.py",
@@ -55,7 +56,7 @@
                 "--debug",
                 "-r",
                 "-c", "config/config.production.yml",
-                "--run-collections", "Christmas"
+                "--run-collections", "Marvel Cinematic Universe"
             ],
             "console": "integratedTerminal",
             "justMyCode": false
@@ -69,6 +70,20 @@
                 "--debug",
                 "-r",
                 "-lf" //libraries first
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "EMM Debugging",
+            "type": "python",
+            "request": "launch",
+            "program": "plex_meta_manager.py",
+            "args": [
+                "--debug",
+                "-c", "config/config.development.yml",
+                "-r"//,
+                //"-l", "TV Shows" //libraries first
             ],
             "console": "integratedTerminal",
             "justMyCode": false

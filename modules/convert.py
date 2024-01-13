@@ -240,8 +240,9 @@ class Convert:
                 if provider_id.lower() == 'imdb':
                     imdb_id.append(item.provider_ids[provider_id])
                 if provider_id.lower() == 'tmdb':
-                    id_to_add = re.findall('\d+',item.provider_ids[provider_id])[0] #Some results need to be filtered in order to remove unwanted values. ex: 105248-cyberpunk-edgerunners
-                    tmdb_id.append(id_to_add)
+                    id_to_add = re.findall('\d+',item.provider_ids[provider_id])
+                    #id_to_add is a list so grab only the first entry
+                    tmdb_id.append(id_to_add[0])
 
             if not tmdb_id and imdb_id:
                 for imdb in imdb_id:

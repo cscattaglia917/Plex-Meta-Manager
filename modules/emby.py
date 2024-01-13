@@ -404,7 +404,10 @@ class Emby(Library):
         if params["emby"]["password"] != None:
             self.configuration.password = params["emby"]["password"]
         #self.configuration.debug = True
-        self.log_dir = os.path.join('/workspaces/Emby-Meta-Manager/config', LOG_DIR)
+        #self.log_dir = os.path.join('/workspaces/Emby-Meta-Manager/config', LOG_DIR)
+        
+        
+        self.log_dir = os.path.join(self.config.default_dir, LOG_DIR)
         self.configuration.logger_file = os.path.join(self.log_dir, DEBUG_LOG)
         logger.secret(self.configuration.host)
         logger.secret(self.configuration.api_key['api_key'])
@@ -1090,7 +1093,7 @@ class Emby(Library):
             if title:
                 results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
                     recursive=True, search_term=title, include_item_types='boxset')
-        elif libtype == 'Movies':
+        elif libtype == 'Movies' or libtype == None:
             if title and not year:
                 results = embyapi.ItemsServiceApi(self.EmbyServer).get_users_by_userid_items(user_id=self.user_id,
                     recursive=True, search_term=title, include_item_types=self.item_types)
@@ -1100,11 +1103,13 @@ class Emby(Library):
         return results
 
     def search_item(self, data, year=None):
+        #TODO: Figure out kwargs stuff and how to insert year if I have it!
         kwargs = {}
         if year is not None:
             kwargs["year"] = year
-        for d in self.search(title=str(data), **kwargs):
-            if d.title == data:
+        results = self.search(title=str(data))
+        for d in results.items:
+            if d.name == data:
                 return d
         return None
 
@@ -1252,21 +1257,22 @@ class Emby(Library):
                         if season_poster or season_background:
                             self.upload_images(season, poster=season_poster, background=season_background)
                         episodes = embyapi.TvShowsServiceApi(self.EmbyServer).get_shows_by_id_episodes(user_id=self.user_id,
-                            id=item.id, season_id=season.id)
-                        for episode in episodes.items:
-                            if episode.index_number:
-                                seasonEpisode = f"S{'0' if season.index_number < 10 else ''}{season.index_number}E{'0' if episode.index_number < 10 else ''}{episode.index_number}"
-                                if item_dir:
-                                    episode_filter = os.path.join(item_dir, f"{seasonEpisode}.*")
-                                else:
-                                    episode_filter = os.path.join(ad, f"{name}_{seasonEpisode}.*")
-                                matches = util.glob_filter(episode_filter)
-                                if len(matches) > 0:
-                                    episode_poster = ImageData("asset_directory", os.path.abspath(matches[0]), prefix=f"{item.name} {seasonEpisode}'s ", is_url=False)
-                                    found_episode = True
-                                    self.upload_images(episode, poster=episode_poster)
-                                elif self.show_missing_episode_assets:
-                                    missing_episodes += f"\nMissing {seasonEpisode} Title Card"
+                            id=item.id, season=season.index_number)
+                        if episodes is not None:
+                            for episode in episodes.items:
+                                if episode.index_number:
+                                    seasonEpisode = f"S{'0' if season.index_number < 10 else ''}{season.index_number}E{'0' if episode.index_number < 10 else ''}{episode.index_number}"
+                                    if item_dir:
+                                        episode_filter = os.path.join(item_dir, f"{seasonEpisode}.*")
+                                    else:
+                                        episode_filter = os.path.join(ad, f"{name}_{seasonEpisode}.*")
+                                    matches = util.glob_filter(episode_filter)
+                                    if len(matches) > 0:
+                                        episode_poster = ImageData("asset_directory", os.path.abspath(matches[0]), prefix=f"{item.name} {seasonEpisode}'s ", is_url=False)
+                                        found_episode = True
+                                        self.upload_images(episode, poster=episode_poster)
+                                    elif self.show_missing_episode_assets:
+                                        missing_episodes += f"\nMissing {seasonEpisode} Title Card"
 
                 if (found_season and missing_seasons) or (found_episode and missing_episodes):
                     output = f"Missing Posters for {item.name}"
