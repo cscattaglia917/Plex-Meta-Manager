@@ -240,9 +240,20 @@ class Convert:
                 if provider_id.lower() == 'imdb':
                     imdb_id.append(item.provider_ids[provider_id])
                 if provider_id.lower() == 'tmdb':
+                    #Check if provider_id value is not all numbers first?
+                    #Only grab numbers from the tmbd ID
                     id_to_add = re.findall('\d+',item.provider_ids[provider_id])
-                    #id_to_add is a list so grab only the first entry
-                    tmdb_id.append(id_to_add[0])
+                    #Sometimes a list is returned..
+                    if isinstance(id_to_add, list):
+                        #Make sure list isn't empty though
+                        if len(id_to_add) > 0:
+                            tmdb_id.append(id_to_add[0])
+                        else:
+                            logger.debug("Unable to append value to tmdb_id")
+                    elif id_to_add is not None:
+                        #should be a string if we get here..
+                        #TODO: Error check some shit.
+                        tmdb_id.append(id_to_add)
 
             if not tmdb_id and imdb_id:
                 for imdb in imdb_id:
