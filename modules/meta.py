@@ -636,7 +636,13 @@ class MetadataFile(DataFile):
                             if current != str(final_value):
                                 if key == "title":
                                     current_item.Name = final_value
+                                    current_item.locked_fields.append('Name')
+                                    #current_item.locked_fields.append(key)
                                     #current_item.editTitle(final_value)
+                                elif key == "sort_name":
+                                    current_item.sort_name = final_value
+                                    current_item.forced_sort_name = final_value
+                                    current_item.locked_fields.append('SortName')
                                 else:
                                     current_item.editField(key, final_value)
                                 logger.info(f"Detail: {name} updated to {final_value}")
@@ -650,7 +656,10 @@ class MetadataFile(DataFile):
                 nonlocal updated
                 if updated:
                     try:
-                        current_item.saveEdits()
+                        current_item.lock_data = True
+                        self.library.update_item(current_item, current_item.id)
+                        #current_item.update_item()
+                        #current_item.update_item
                         logger.info(f"{description} Details Update Successful")
                     except BadRequest:
                         logger.error(f"{description} Details Update Failed")
@@ -745,6 +754,7 @@ class MetadataFile(DataFile):
             #need to get the FULL item here!
             
             #item = self.library.update_item()
+            item = self.library.fetch_item(item.id)
 
             add_edit("title", item, meta, methods, value=title)
             add_edit("sort_title", item, meta, methods, key="sort_name")
@@ -758,9 +768,9 @@ class MetadataFile(DataFile):
                 add_edit("studio", item, meta, methods, value=studio)
                 add_edit("tagline", item, meta, methods, value=tagline)
             add_edit("summary", item, meta, methods, value=summary)
-            for tag_edit in util.tags_to_edit[self.library.type]:
-                if self.edit_tags(tag_edit, item, meta, methods, extra=genres if tag_edit == "genre" else None):
-                    updated = True
+            # for tag_edit in util.tags_to_edit[self.library.type]:
+            #     if self.edit_tags(tag_edit, item, meta, methods, extra=genres if tag_edit == "genre" else None):
+            #         updated = True
             finish_edit(item, f"{self.library.type}: {mapping_name}")
 
             if self.library.type in util.advance_tags_to_edit:

@@ -2086,7 +2086,7 @@ class CollectionBuilder:
 
     def fetch_item(self, item):
         try:
-            current = self.library.fetchItem(item)
+            current = self.library.fetch_item(item)
             itemType = current.type
             if not itemType in ["Movie", "Series", "Season", "Episode", "MusicArtist", "MusicAlbum", "Audio", "BoxSet"]:
                 raise NotFound

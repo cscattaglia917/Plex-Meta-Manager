@@ -508,7 +508,7 @@ class Emby(Library):
         return self.Emby.search(label=label)
 
     @retry(stop_max_attempt_number=6, wait_fixed=10000, retry_on_exception=util.retry_if_not_plex)
-    def fetchItem(self, data):
+    def fetch_item(self, data):
         results = []
         results = embyapi.UserLibraryServiceApi(self.EmbyServer).get_users_by_userid_items_by_id(user_id=self.user_id,
             id=data)
@@ -540,15 +540,18 @@ class Emby(Library):
         # Convert both itemResults and body to dicts, then update itemDict with values from bodyDict, if the value is not null.
         # Build a new BaseItemDTO object and insert itemDict values into said object if values are not null.
         # Post newItem object with all existing data + new data.
-        itemResults = embyapi.UserLibraryServiceApi(self.EmbyAdminServer).get_users_by_userid_items_by_id(self.user_id, id)
-        itemDict = itemResults.to_dict()
-        bodyDict = body.to_dict()
-        itemDict.update( (k,v) for k,v in bodyDict.items() if v is not None)
-        newItem = embyapi.BaseItemDto()
-        for item in itemDict:
-            if itemDict[item] is not None:
-                setattr(newItem, item, itemDict[item])
-        embyapi.ItemUpdateServiceApi(self.EmbyAdminServer).post_items_by_itemid(newItem, id)
+        
+        response = embyapi.ItemUpdateServiceApi(self.EmbyServer).post_items_by_itemid(body, id)
+        #print(response)
+        #itemResults = embyapi.UserLibraryServiceApi(self.EmbyAdminServer).get_users_by_userid_items_by_id(self.user_id, id)
+        #itemDict = itemResults.to_dict()
+        #bodyDict = body.to_dict()
+        #itemDict.update( (k,v) for k,v in bodyDict.items() if v is not None)
+        #newItem = embyapi.BaseItemDto()
+        #for item in itemDict:
+        #    if itemDict[item] is not None:
+        #        setattr(newItem, item, itemDict[item])
+        #embyapi.ItemUpdateServiceApi(self.EmbyAdminServer).post_items_by_itemid(newItem, id)
 
     def get_all(self, collection_level=None, load=False, mapping=False):
         results = []
@@ -981,14 +984,14 @@ class Emby(Library):
 
     def get_collection(self, data):
         if isinstance(data, int):
-            return self.fetchItem(data)
+            return self.fetch_item(data)
         elif isinstance(data, Collection):
             return data
         else:
             cols = self.search(title=str(data), libtype="collection")
             for d in cols.items:
                 if d.name == data:
-                    return self.fetchItem(d.id) 
+                    return self.fetch_item(d.id) 
                     #return d
             logger.debug("")
             for d in cols.items:
