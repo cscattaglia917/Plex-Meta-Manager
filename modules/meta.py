@@ -635,14 +635,14 @@ class MetadataFile(DataFile):
                                 final_value = value
                             if current != str(final_value):
                                 if key == "title":
-                                    current_item.Name = final_value
-                                    current_item.locked_fields.append('Name')
-                                    #current_item.locked_fields.append(key)
-                                    #current_item.editTitle(final_value)
+                                    current_item.name = final_value
+                                    if 'Name' not in current_item.locked_fields:
+                                        current_item.locked_fields.append('Name')
                                 elif key == "sort_name":
                                     current_item.sort_name = final_value
                                     current_item.forced_sort_name = final_value
-                                    current_item.locked_fields.append('SortName')
+                                    if 'SortName' not in current_item.locked_fields:
+                                        current_item.locked_fields.append('SortName')
                                 else:
                                     current_item.editField(key, final_value)
                                 logger.info(f"Detail: {name} updated to {final_value}")
