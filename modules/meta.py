@@ -63,6 +63,7 @@ class DataFile:
         self.path = path
         self.data_type = ""
         self.templates = {}
+        yaml.YAML().allow_duplicate_keys = True
 
     def get_file_name(self):
         data = f"{github_base}{self.path}.yml" if self.type == "GIT" else self.path
@@ -226,6 +227,7 @@ class DataFile:
 class MetadataFile(DataFile):
     def __init__(self, config, library, file_type, path):
         super().__init__(config, file_type, path)
+        yaml.YAML().allow_duplicate_keys = True
         self.data_type = "Collection"
         self.library = library
         if file_type == "Data":
@@ -605,6 +607,7 @@ class MetadataFile(DataFile):
 
             def add_edit(name, current_item, group=None, alias=None, key=None, value=None, var_type="str"):
                 nonlocal updated
+                attr_map = current_item.attribute_map
                 if value or name in alias:
                     if value or group[alias[name]]:
                         if key is None:         key = name
@@ -619,33 +622,90 @@ class MetadataFile(DataFile):
                                 try:
                                     value = float(str(value))
                                     if 0 <= value <= 10:
-                                        final_value = value
+                                        if key == "critic_rating":
+                                            #critic_rating in Emby seems to be 0-100. so multiply by 10 first.
+                                            final_value = value * 10
+                                        else:
+                                            final_value = value
                                 except ValueError:
                                     pass
                                 if final_value is None:
-                                    raise Failed(f"Metadata Error: {name} attribute must be a number between 0 and 10")
+                                    raise Failed(f"Metadata Error: {name} attribute must be a number between 0 and 10 - {value} given")
                             elif var_type == "int":
                                 try:
                                     final_value = int(str(value))
                                 except ValueError:
                                     pass
                                 if final_value is None:
-                                    raise Failed(f"Metadata Error: {name} attribute must be an integer")
+                                    raise Failed(f"Metadata Error: {name} attribute must be an integer - {value} given")
+                            elif var_type == "bool":
+                                try:
+                                    final_value = value
+                                except ValueError:
+                                    pass
+                                
+                                
+                                # taglines
+                                # premiere_date
+                                # summary
+                                # year? 
                             else:
                                 final_value = value
                             if current != str(final_value):
-                                if key == "title":
+                                if key == "name":
+                                    mapped_key = attr_map[key]
+                                    #Figure out how to access current_item.key instead
                                     current_item.name = final_value
-                                    if 'Name' not in current_item.locked_fields:
-                                        current_item.locked_fields.append('Name')
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
                                 elif key == "sort_name":
+                                    mapped_key = attr_map[key]
                                     current_item.sort_name = final_value
                                     current_item.forced_sort_name = final_value
-                                    if 'SortName' not in current_item.locked_fields:
-                                        current_item.locked_fields.append('SortName')
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
+                                elif key == "critic_rating":
+                                    current_item.critic_rating = final_value
+                                elif key == "community_rating":
+                                    current_item.community_rating = final_value
+                                elif key == "official_rating":
+                                    mapped_key = attr_map[key]
+                                    current_item.official_rating = final_value
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
+                                elif key == "original_title":
+                                    mapped_key = attr_map[key]
+                                    current_item.original_title = final_value
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
+                                elif key == "studios":
+                                    mapped_key = attr_map[key]
+                                    if final_value not in current_item.studios:
+                                        #TODO: Studios could be a list of names to loop through and add.
+                                        #I can put id == 1 and emby auto-creates a UID - same true for already existing studios.
+                                        studio_to_add = {
+                                            "id": "",
+                                            "name": ""
+                                        }
+                                        studio_to_add["name"] = final_value
+                                        current_item.studios.append(studio_to_add)
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
+                                elif key == "favorite":
+                                    if final_value != current_item.user_data.is_favorite:
+                                        #TODO: Wrap in a basic try/catch
+                                        #Separate post request for favorite item
+                                        #TODO: If final_value = false - unfavorite item!
+                                        updated_item = self.library.favorite_item(current_item)
+                                        if updated_item is None:
+                                            logger.error(f"Metadata Error: Unable to favorite {name}")
+                                        else:
+                                            logger.info(f"Detail: {current_item.name} marked as favorite")
+
                                 else:
                                     current_item.editField(key, final_value)
-                                logger.info(f"Detail: {name} updated to {final_value}")
+                                if key != "favorite":
+                                    logger.info(f"Detail: {name} updated to {final_value}")
                                 updated = True
                         except Failed as ee:
                             logger.error(ee)
@@ -658,8 +718,6 @@ class MetadataFile(DataFile):
                     try:
                         current_item.lock_data = True
                         self.library.update_item(current_item, current_item.id)
-                        #current_item.update_item()
-                        #current_item.update_item
                         logger.info(f"{description} Details Update Successful")
                     except BadRequest:
                         logger.error(f"{description} Details Update Failed")
@@ -756,18 +814,21 @@ class MetadataFile(DataFile):
             #item = self.library.update_item()
             item = self.library.fetch_item(item.id)
 
-            add_edit("title", item, meta, methods, value=title)
+            add_edit("title", item, meta, methods, key="name", value=title)
             add_edit("sort_title", item, meta, methods, key="sort_name")
-            add_edit("user_rating", item, meta, methods, key="userRating", var_type="float")
+            #Sending user_data as the key will pull back the user_data info (favorited, playcount, etc.) but it is quite messy. Just use "favorite" key for now and hardcode the rest into the add_edit func
+            #Best option is to send whole key "user_data.is_favorite" and have the add_edit func pull the corresponding value and go from there. Requires re-work of add_edit func.
+            #add_edit("favorite", item, meta, methods, key="user_data", var_type="bool")
+            add_edit("favorite", item, meta, methods, key="favorite", var_type="bool")
             if not self.library.is_music:
-                add_edit("originally_available", item, meta, methods, key="originallyAvailableAt", value=originally_available, var_type="date")
-                add_edit("critic_rating", item, meta, methods, value=rating, key="rating", var_type="float")
-                add_edit("audience_rating", item, meta, methods, key="audienceRating", var_type="float")
-                add_edit("content_rating", item, meta, methods, key="contentRating")
-                add_edit("original_title", item, meta, methods, key="originalTitle", value=original_title)
-                add_edit("studio", item, meta, methods, value=studio)
-                add_edit("tagline", item, meta, methods, value=tagline)
-            add_edit("summary", item, meta, methods, value=summary)
+                add_edit("critic_rating", item, meta, methods, value=rating, var_type="float")
+                add_edit("audience_rating", item, meta, methods, key="community_rating", var_type="float")
+                add_edit("content_rating", item, meta, methods, key="official_rating")
+                add_edit("original_title", item, meta, methods, value=original_title)
+                add_edit("studio", item, meta, methods, key="studios", value=studio)
+                add_edit("tagline", item, meta, methods, key="taglines", value=tagline)
+                add_edit("originally_available", item, meta, methods, key="premiere_date", value=originally_available, var_type="date")
+            add_edit("summary", item, meta, methods, key=summary, value=summary)
             # for tag_edit in util.tags_to_edit[self.library.type]:
             #     if self.edit_tags(tag_edit, item, meta, methods, extra=genres if tag_edit == "genre" else None):
             #         updated = True

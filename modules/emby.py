@@ -528,6 +528,15 @@ class Emby(Library):
             return None
         return favorite_status
 
+
+    def favorite_item(self, item):
+        if item is not None:
+            response = embyapi.UserLibraryServiceApi(self.EmbyServer).post_users_by_userid_favoriteitems_by_id(user_id=self.user_id, 
+                                                                                                               id=item.id)
+        else:
+            return None
+        return response
+
     def favorite_collection(self, collection_id, collection_items=None):
         if collection_items:
             #if collection_items is true - favorite all items - then collection itself.
@@ -1106,11 +1115,10 @@ class Emby(Library):
         return results
 
     def search_item(self, data, year=None):
-        #TODO: Figure out kwargs stuff and how to insert year if I have it!
         kwargs = {}
         if year is not None:
             kwargs["year"] = year
-        results = self.search(title=str(data))
+        results = self.search(title=str(data), **kwargs)
         for d in results.items:
             if d.name == data:
                 return d
