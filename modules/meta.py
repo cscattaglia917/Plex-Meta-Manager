@@ -63,6 +63,7 @@ class DataFile:
         self.path = path
         self.data_type = ""
         self.templates = {}
+        yaml.YAML().allow_duplicate_keys = True
 
     def get_file_name(self):
         data = f"{github_base}{self.path}.yml" if self.type == "GIT" else self.path
@@ -226,6 +227,7 @@ class DataFile:
 class MetadataFile(DataFile):
     def __init__(self, config, library, file_type, path):
         super().__init__(config, file_type, path)
+        yaml.YAML().allow_duplicate_keys = True
         self.data_type = "Collection"
         self.library = library
         if file_type == "Data":
@@ -646,49 +648,64 @@ class MetadataFile(DataFile):
                                 # taglines
                                 # premiere_date
                                 # summary
+                                # year? 
                             else:
                                 final_value = value
                             if current != str(final_value):
-                                if key == "title":
+                                if key == "name":
+                                    mapped_key = attr_map[key]
+                                    #Figure out how to access current_item.key instead
                                     current_item.name = final_value
-                                    if 'Name' not in current_item.locked_fields:
-                                        current_item.locked_fields.append('Name')
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
                                 elif key == "sort_name":
+                                    mapped_key = attr_map[key]
                                     current_item.sort_name = final_value
                                     current_item.forced_sort_name = final_value
-                                    if 'SortName' not in current_item.locked_fields:
-                                        current_item.locked_fields.append('SortName')
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
                                 elif key == "critic_rating":
                                     current_item.critic_rating = final_value
                                 elif key == "community_rating":
                                     current_item.community_rating = final_value
                                 elif key == "official_rating":
+                                    mapped_key = attr_map[key]
                                     current_item.official_rating = final_value
-                                    if 'OfficialRating' not in current_item.locked_fields:
-                                        current_item.locked_fields.append('OfficialRating')
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
                                 elif key == "original_title":
+                                    mapped_key = attr_map[key]
                                     current_item.original_title = final_value
-                                    if 'OriginalTitle' not in current_item.locked_fields:
-                                        current_item.locked_fields.append('OriginalTitle')
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
                                 elif key == "studios":
+                                    mapped_key = attr_map[key]
                                     if final_value not in current_item.studios:
                                         #TODO: Studios could be a list of names to loop through and add.
                                         #I can put id == 1 and emby auto-creates a UID - same true for already existing studios.
                                         studio_to_add = {
-                                            "id": "1",
+                                            "id": "",
                                             "name": ""
                                         }
                                         studio_to_add["name"] = final_value
                                         current_item.studios.append(studio_to_add)
-                                    if 'Studios' not in current_item.locked_fields:
-                                        current_item.locked_fields.append('Studios')
+                                    if mapped_key not in current_item.locked_fields:
+                                        current_item.locked_fields.append(mapped_key)
                                 elif key == "favorite":
-                                    #Need to send a separate post request to FavoriteItems endpoint for this.
-                                    current_item.user_data.is_favorite = final_value
+                                    if final_value != current_item.user_data.is_favorite:
+                                        #TODO: Wrap in a basic try/catch
+                                        #Separate post request for favorite item
+                                        #TODO: If final_value = false - unfavorite item!
+                                        updated_item = self.library.favorite_item(current_item)
+                                        if updated_item is None:
+                                            logger.error(f"Metadata Error: Unable to favorite {name}")
+                                        else:
+                                            logger.info(f"Detail: {current_item.name} marked as favorite")
 
                                 else:
                                     current_item.editField(key, final_value)
-                                logger.info(f"Detail: {name} updated to {final_value}")
+                                if key != "favorite":
+                                    logger.info(f"Detail: {name} updated to {final_value}")
                                 updated = True
                         except Failed as ee:
                             logger.error(ee)
@@ -797,7 +814,7 @@ class MetadataFile(DataFile):
             #item = self.library.update_item()
             item = self.library.fetch_item(item.id)
 
-            add_edit("title", item, meta, methods, value=title)
+            add_edit("title", item, meta, methods, key="name", value=title)
             add_edit("sort_title", item, meta, methods, key="sort_name")
             #Sending user_data as the key will pull back the user_data info (favorited, playcount, etc.) but it is quite messy. Just use "favorite" key for now and hardcode the rest into the add_edit func
             #Best option is to send whole key "user_data.is_favorite" and have the add_edit func pull the corresponding value and go from there. Requires re-work of add_edit func.
