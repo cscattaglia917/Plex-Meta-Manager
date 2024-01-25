@@ -1,6 +1,6 @@
 import base64
 import contextlib, glob, logging, os, re, requests, signal, sys, time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathvalidate import is_valid_filename, sanitize_filename
 from plexapi.audio import Album, Track
 from plexapi.exceptions import BadRequest, NotFound, Unauthorized
@@ -140,8 +140,10 @@ def validate_date(date_text, method, return_as=None):
     else:
         try:
             date_obg = datetime.strptime(str(date_text), "%Y-%m-%d" if "-" in str(date_text) else "%m/%d/%Y")
+            date_obg = date_obg.replace(tzinfo=timezone.utc)
         except ValueError:
             raise Failed(f"Collection Error: {method}: {date_text} must match pattern YYYY-MM-DD (e.g. 2020-12-25) or MM/DD/YYYY (e.g. 12/25/2020)")
+    return datetime.isoformat(date_obg).replace("+00:00", "Z")
     return datetime.strftime(date_obg, return_as) if return_as else date_obg
 
 def logger_input(prompt, timeout=60):

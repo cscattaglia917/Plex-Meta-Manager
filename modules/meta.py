@@ -616,7 +616,7 @@ class MetadataFile(DataFile):
                             current = str(getattr(current_item, key, ""))
                             final_value = None
                             if var_type == "date":
-                                final_value = util.validate_date(value, name, return_as="%Y-%m-%d")
+                                final_value = util.validate_date(value, name, return_as="%Y-%m-%d %H:%M")
                                 current = current[:-9]
                             elif var_type == "float":
                                 try:
@@ -648,7 +648,6 @@ class MetadataFile(DataFile):
                                 # taglines
                                 # premiere_date
                                 # summary
-                                # year? 
                             else:
                                 final_value = value
                             if current != str(final_value):
@@ -665,8 +664,10 @@ class MetadataFile(DataFile):
                                     if mapped_key not in current_item.locked_fields:
                                         current_item.locked_fields.append(mapped_key)
                                 elif key == "critic_rating":
+                                    #Can't lock this field
                                     current_item.critic_rating = final_value
                                 elif key == "community_rating":
+                                    #Can't lock this field
                                     current_item.community_rating = final_value
                                 elif key == "official_rating":
                                     mapped_key = attr_map[key]
@@ -691,6 +692,20 @@ class MetadataFile(DataFile):
                                         current_item.studios.append(studio_to_add)
                                     if mapped_key not in current_item.locked_fields:
                                         current_item.locked_fields.append(mapped_key)
+                                elif key == "taglines":
+                                    #Can't lock this field
+                                    mapped_key = attr_map[key]
+                                    #even though taglines is an array - it can only hold one value... So overwrite it!
+                                    current_item.taglines[0] = final_value
+                                elif key == "premiere_date":
+                                    #Can't lock this field
+                                    mapped_key = attr_map[key]
+                                    current_item.premiere_date = final_value
+                                elif key == "overview":
+                                    #Can't lock this field
+                                    mapped_key = attr_map[key]
+                                    current_item.overview = final_value
+
                                 elif key == "favorite":
                                     if final_value != current_item.user_data.is_favorite:
                                         #TODO: Wrap in a basic try/catch
@@ -828,7 +843,7 @@ class MetadataFile(DataFile):
                 add_edit("studio", item, meta, methods, key="studios", value=studio)
                 add_edit("tagline", item, meta, methods, key="taglines", value=tagline)
                 add_edit("originally_available", item, meta, methods, key="premiere_date", value=originally_available, var_type="date")
-            add_edit("summary", item, meta, methods, key=summary, value=summary)
+            add_edit("summary", item, meta, methods, key="overview", value=summary)
             # for tag_edit in util.tags_to_edit[self.library.type]:
             #     if self.edit_tags(tag_edit, item, meta, methods, extra=genres if tag_edit == "genre" else None):
             #         updated = True
