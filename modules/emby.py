@@ -426,7 +426,7 @@ class Emby(Library):
         library_results = embyapi.LibraryServiceApi(self.EmbyServer).get_library_mediafolders()
         for s in library_results.items:
             library_names.append(s.name)
-            if s.name == params["name"]:
+            if s.name.strip() == params["name"].strip():
                 self.Emby = s
                 self.library_id = s.id
                 break
@@ -543,6 +543,16 @@ class Emby(Library):
             for item in collection_items:
                embyapi.UserLibraryServiceApi(self.EmbyServer).post_users_by_userid_favoriteitems_by_id(user_id=self.user_id, id=item.id)
         embyapi.UserLibraryServiceApi(self.EmbyServer).post_users_by_userid_favoriteitems_by_id(user_id=self.user_id, id=collection_id)
+
+    def update_user_rating(self, id, updates=None):
+        #TODO: This doesn't seem to stick - opened message on Emby dev forums.
+        #https://emby.media/community/index.php?/topic/108429-setting-items-user_data-attributes/
+        #/Users/{UserId}/Items/{ItemId}/UserData - but this does not work either.
+        try:
+            response = embyapi.UserLibraryServiceApi(self.EmbyServer).post_users_by_userid_items_by_id_rating(user_id=self.user_id, id=id, likes=True)
+        except ApiException as ae:
+            logger.error(ae)
+        return response
 
     def update_item(self, body, id):
         # Need to grab results for the specific item so that we include all current values in the POST request.
@@ -748,12 +758,22 @@ class Emby(Library):
             logger.error("Error while deleting collection %s", e)
             
     def alter_collection(self, collection_id, item, smart_label_collection=False, add=True):
-        #TODO: Wrap in try/catch/except
+        #TODO: This needs to be fixed - calling functions (builder.sync_collection) are not sending list of all items to remove
         if isinstance(item, list):
             id_string = ''
             for i in item:
                 id_string += i.id + ','
-            embyapi.CollectionServiceApi(self.EmbyServer).post_collections_by_id_items(id=collection_id, ids=id_string)
+            if not add:
+                try:
+                    embyapi.CollectionServiceApi(self.EmbyServer).delete_collections_by_id_items(id=collection_id, ids=id_string)
+                    return len(item)
+                except ApiException as e:
+                    logger.error("Error removing item from collection %s", e)
+            else:
+                try:
+                    embyapi.CollectionServiceApi(self.EmbyServer).post_collections_by_id_items(id=collection_id, ids=id_string)
+                except ApiException as e:
+                    logger.error("Error adding item to collection %s", e)
         if isinstance(item, int):
             print("How did we get here?")
 

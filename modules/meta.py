@@ -3,6 +3,7 @@ from datetime import datetime
 from modules import plex, ergast, util
 from modules.util import Failed, ImageData
 from plexapi.exceptions import NotFound, BadRequest
+from embyapi.rest import ApiException
 from tmdbapis import NotFound as TMDbNotFound
 from ruamel import yaml
 
@@ -695,8 +696,9 @@ class MetadataFile(DataFile):
                                 elif key == "taglines":
                                     #Can't lock this field
                                     mapped_key = attr_map[key]
-                                    #even though taglines is an array - it can only hold one value... So overwrite it!
-                                    current_item.taglines[0] = final_value
+                                    #even though taglines is an array - it can only hold one value... So clear and set.
+                                    current_item.taglines.clear()
+                                    current_item.taglines.append(final_value)
                                 elif key == "premiere_date":
                                     #Can't lock this field
                                     mapped_key = attr_map[key]
@@ -734,7 +736,7 @@ class MetadataFile(DataFile):
                         current_item.lock_data = True
                         self.library.update_item(current_item, current_item.id)
                         logger.info(f"{description} Details Update Successful")
-                    except BadRequest:
+                    except ApiException:
                         logger.error(f"{description} Details Update Failed")
 
             logger.info("")

@@ -48,15 +48,16 @@
             "justMyCode": false
         },
         {
-            "name": "One-Off Collection",
+            "name": "EMM One Collection",
             "type": "python",
             "request": "launch",
             "program": "plex_meta_manager.py",
             "args": [
                 "--debug",
                 "-r",
-                "-c", "config/config.production.yml",
-                "--run-collections", "Marvel Cinematic Universe"
+                "-co",
+                "-c", "config/config.development.yml",
+                "--run-collections", "Trending"
             ],
             "console": "integratedTerminal",
             "justMyCode": false
@@ -82,8 +83,8 @@
             "args": [
                 "--debug",
                 "-c", "config/config.development.yml",
-                "-r"//,
-                //"-l", "TV Shows" //libraries first
+                "-r",
+                //"-l", "Movies-Test" //libraries first
             ],
             "console": "integratedTerminal",
             "justMyCode": false
