@@ -57,7 +57,7 @@
                 "-r",
                 "-co",
                 "-c", "config/config.development.yml",
-                "--run-collections", "Trending"
+                "--run-collections", "Popular on Plex"
             ],
             "console": "integratedTerminal",
             "justMyCode": false
@@ -84,7 +84,7 @@
                 "--debug",
                 "-c", "config/config.development.yml",
                 "-r",
-                //"-l", "Movies-Test" //libraries first
+                "-l", "Movies-Test" //libraries first
             ],
             "console": "integratedTerminal",
             "justMyCode": false

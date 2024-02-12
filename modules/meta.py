@@ -666,9 +666,11 @@ class MetadataFile(DataFile):
                                         current_item.locked_fields.append(mapped_key)
                                 elif key == "critic_rating":
                                     #Can't lock this field
+                                    mapped_key = attr_map[key]
                                     current_item.critic_rating = final_value
                                 elif key == "community_rating":
                                     #Can't lock this field
+                                    mapped_key = attr_map[key]
                                     current_item.community_rating = final_value
                                 elif key == "official_rating":
                                     mapped_key = attr_map[key]
@@ -682,17 +684,21 @@ class MetadataFile(DataFile):
                                         current_item.locked_fields.append(mapped_key)
                                 elif key == "studios":
                                     mapped_key = attr_map[key]
-                                    if final_value not in current_item.studios:
-                                        #TODO: Studios could be a list of names to loop through and add.
-                                        #I can put id == 1 and emby auto-creates a UID - same true for already existing studios.
+                                    exists = False
+                                    if len(current_item.studios) > 0:
+                                        #check to see if studio already exists
+                                        for s in current_item.studios:
+                                            if final_value == s.name: #studio is already set so continue
+                                                exists = True
+                                    if not exists:
                                         studio_to_add = {
                                             "id": "",
                                             "name": ""
                                         }
                                         studio_to_add["name"] = final_value
                                         current_item.studios.append(studio_to_add)
-                                    if mapped_key not in current_item.locked_fields:
-                                        current_item.locked_fields.append(mapped_key)
+                                        if mapped_key not in current_item.locked_fields:
+                                            current_item.locked_fields.append(mapped_key)
                                 elif key == "taglines":
                                     #Can't lock this field
                                     mapped_key = attr_map[key]

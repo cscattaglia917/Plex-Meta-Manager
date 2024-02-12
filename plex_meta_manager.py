@@ -637,7 +637,22 @@ def emby_library_operations(config, library):
                         else:
                             mapped_genres.append(genre)
                     new_genres = mapped_genres
-                batch_display += f"\n{library.edit_tags('genre', item, sync_tags=new_genres)}"
+                    
+                if "Genres" not in item.locked_fields:
+                    if item.genres is not None:
+                        item.genres.clear() #clear existing list
+                        item.genre_items.clear()
+                        for genre in new_genres:
+                            genre_to_add = {
+                                "id": "",
+                                "name": ""
+                            }
+                            genre_to_add["name"] = genre
+                            item.genres.append(genre_to_add)
+                            item.genre_items.append(genre_to_add)
+
+                        batch_display += f"\n{item.name[:25]:<25} | Genres | {new_genres}"
+                        logger.info(f"{item.name[:25]:<25} | Genres | {new_genres}")
 
             if library.mass_audience_rating_update:
                 new_rating = get_rating(library.mass_audience_rating_update)
