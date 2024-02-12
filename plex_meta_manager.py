@@ -6,6 +6,7 @@ try:
     from modules.logs import MyLogger
     from plexapi.exceptions import NotFound
     from plexapi.video import Show, Season
+    from embyapi.rest import ApiException
     from ruamel import yaml
 except ModuleNotFoundError:
     print("Requirements Error: Requirements are not installed")
@@ -481,8 +482,10 @@ def emby_library_operations(config, library):
                         raise Failed
                     if str(item.user_data.rating) != str(new_rating):
                         #TODO: This doesn't seem to stick - opened message on Emby dev forums.
-                        item.user_data.rating = new_rating
-                        logger.info(f"{item.name[:25]:<25} | User Rating | {new_rating}")
+                        #https://emby.media/community/index.php?/topic/108429-setting-items-user_data-attributes/
+                        #/Users/{UserId}/Items/{ItemId}/UserData - but this does not work either.
+                        library.update_user_rating(id=item.id)
+                        logger.info(f"{item.name[:25]:<25} | User Rating | {new_rating} doesn't work with Emby")
                 except Failed:
                     pass
             
@@ -634,7 +637,22 @@ def emby_library_operations(config, library):
                         else:
                             mapped_genres.append(genre)
                     new_genres = mapped_genres
-                batch_display += f"\n{library.edit_tags('genre', item, sync_tags=new_genres)}"
+                    
+                if "Genres" not in item.locked_fields:
+                    if item.genres is not None:
+                        item.genres.clear() #clear existing list
+                        item.genre_items.clear()
+                        for genre in new_genres:
+                            genre_to_add = {
+                                "id": "",
+                                "name": ""
+                            }
+                            genre_to_add["name"] = genre
+                            item.genres.append(genre_to_add)
+                            item.genre_items.append(genre_to_add)
+
+                        batch_display += f"\n{item.name[:25]:<25} | Genres | {new_genres}"
+                        logger.info(f"{item.name[:25]:<25} | Genres | {new_genres}")
 
             if library.mass_audience_rating_update:
                 new_rating = get_rating(library.mass_audience_rating_update)
@@ -713,8 +731,10 @@ def emby_library_operations(config, library):
                         logger.info(f"{item.name[:25]:<25} | Originally Available Date | {new_date.strftime('%Y-%m-%d')}")
                 except Failed:
                     pass
-            #item.user_data.is_favorite = True
-            library.update_item(item, item.id)
+            try:
+                library.update_item(item, item.id)
+            except ApiException as ae:
+                logger.error(ae)
 
         if library.Radarr and library.radarr_add_all_existing:
             try:

@@ -5,5 +5,5 @@ if [[ -z $VERSION ]]; then
     exit
 else
     echo "Building Emby-Meta-Manager:$VERSION"
-    docker build -t emby-meta-manager:$VERSION .
+    docker build -t emby-meta-manager:$VERSION -t emby-meta-manager:latest .
 fi

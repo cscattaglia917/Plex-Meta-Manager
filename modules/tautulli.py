@@ -49,18 +49,19 @@ class Tautulli:
                         emby_item = library.exact_search(item["title"], libtype=library.type, year=item["year"])
                         if not emby_item:
                             raise BadRequest
-                        rating_keys.append((emby_item.items[0].id, "ratingKey"))
+                        if len(emby_item.items) > 0:
+                            rating_keys.append((emby_item.items[0].id, "ratingKey"))
+                        else:
+                            raise NotFound
                     else:
                         plex_item = library.fetchItem(int(item["rating_key"]))
                         if not isinstance(plex_item, (Movie, Show)):
                             raise BadRequest
                         rating_keys.append((item["rating_key"], "ratingKey"))
-                except (BadRequest, NotFound):
-                    new_item = library.exact_search(item["title"], year=item["year"])
-                    if new_item:
-                        rating_keys.append((new_item[0].ratingKey, "ratingKey"))
-                    else:
-                        logger.error(f"Plex Error: Item {item} not found")
+                except BadRequest as br:
+                    logger.error(f"Error: Bad Request \n {br}")
+                except NotFound:
+                    logger.error(f"Emby Error: Item {item['title']}:{item['year']} not found")
         logger.debug("")
         logger.debug(f"{len(rating_keys)} Keys Found: {rating_keys}")
         return rating_keys

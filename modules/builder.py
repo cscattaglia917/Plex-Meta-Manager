@@ -2163,7 +2163,7 @@ class CollectionBuilder:
                     else:
                         add_id = None
                     self.notification_additions.append(util.item_set(item, add_id))
-        if items_to_add is not None and not self.playlist:
+        if items_to_add is not None and len(items_to_add) > 0 and not self.playlist:
             self.library.alter_collection(collection_id, items_to_add)
         if self.playlist and playlist_adds and not self.obj:
             self.obj = self.library.create_playlist(self.name, playlist_adds)
@@ -2186,23 +2186,25 @@ class CollectionBuilder:
             logger.info("")
             total = len(items)
             spacing = len(str(total)) * 2 + 1
-            for i, item in enumerate(items, 1):
-                self.library.reload(item)
-                number_text = f"{i}/{total}"
-                logger.info(f"{number_text:>{spacing}} | {self.name} {self.Type} | - | {item.name}")
-                if self.playlist:
-                    playlist_removes.append(item)
-                else:
-                    self.library.alter_collection(item, self.name, smart_label_collection=self.smart_label_collection, add=False)
-                amount_removed += 1
-                if self.details["changes_webhooks"]:
-                    if item.ratingKey in self.library.movie_rating_key_map:
-                        remove_id = self.library.movie_rating_key_map[item.ratingKey]
-                    elif item.ratingKey in self.library.show_rating_key_map:
-                        remove_id = self.library.show_rating_key_map[item.ratingKey]
-                    else:
-                        remove_id = None
-                    self.notification_removals.append(util.item_set(item, remove_id))
+            amount_removed = self.library.alter_collection(self.obj.id, items, add=False)
+            if amount_removed > 0:
+                for i, item in enumerate(items, 1):
+                    self.library.reload(item)
+                    number_text = f"{i}/{total}"
+                    logger.info(f"{number_text:>{spacing}} | {self.name} {self.Type} | - | {item.name}")
+                # if self.playlist:
+                #     playlist_removes.append(item)
+                # else:
+                #     self.library.alter_collection(self.obj.id, item, smart_label_collection=self.smart_label_collection, add=False)
+                # amount_removed += 1
+                # if self.details["changes_webhooks"]:
+                #     if item.ratingKey in self.library.movie_rating_key_map:
+                #         remove_id = self.library.movie_rating_key_map[item.ratingKey]
+                #     elif item.ratingKey in self.library.show_rating_key_map:
+                #         remove_id = self.library.show_rating_key_map[item.ratingKey]
+                #     else:
+                #         remove_id = None
+                #     self.notification_removals.append(util.item_set(item, remove_id))
             if self.playlist and playlist_removes:
                 self.obj.reload()
                 self.obj.removeItems(playlist_removes)
